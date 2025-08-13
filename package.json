@@ -1,0 +1,180 @@
+{
+  "name": "novel-assistant",
+  "displayName": "Novel Assistant",
+  "description": "An extension to support long-form novel writing with LLMs, managing consistency and story bible.",
+  "version": "0.1.0",
+  "publisher": "your-publisher-name",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:novel-assistant.initializeProject",
+    "onCommand:novel-assistant.openChat",
+    "onCommand:novel-assistant.createChapterFromTemplate",
+    "onCommand:novel-assistant.runConsistencyChecks",
+    "onCommand:novel-assistant.rebuildForeshadowIndex",
+    "onCommand:novel-assistant.exportReport",
+    "onWebviewPanel:novel-assistant.chatView"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "novel-assistant.initializeProject",
+        "title": "Novel: Initialize Story Project",
+        "category": "Novel Assistant"
+      },
+      {
+        "command": "novel-assistant.openChat",
+        "title": "Novel: Open Chat",
+        "category": "Novel Assistant"
+      },
+      {
+        "command": "novel-assistant.createChapterFromTemplate",
+        "title": "Novel: Create Chapter from Template",
+        "category": "Novel Assistant"
+      },
+      {
+        "command": "novel-assistant.runConsistencyChecks",
+        "title": "Novel: Run Consistency Checks for Current Chapter",
+        "category": "Novel Assistant"
+      },
+      {
+        "command": "novel-assistant.rebuildForeshadowIndex",
+        "title": "Novel: Rebuild Foreshadow Index",
+        "category": "Novel Assistant"
+      },
+      {
+        "command": "novel-assistant.exportReport",
+        "title": "Novel: Export Report (HTML)",
+        "category": "Novel Assistant"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "novel-assistant.openChat",
+        "key": "ctrl+shift+j",
+        "mac": "cmd+shift+j"
+      }
+    ],
+ "configurationDefaults": {
+      "[jsonc]": {
+        "editor.defaultFormatter": "vscode.json-language-features"
+      },
+      "files.associations": {
+        ".novelrc.json": "jsonc"
+      }
+    },
+
+
+    "configuration": {
+      "title": "Novel Assistant",
+      "properties": {
+        "novelAssistant.provider": {
+          "type": "string",
+          "enum": [
+            "openrouter",
+            "openai"
+          ],
+          "default": "openrouter",
+          "description": "The LLM provider to use."
+        },
+        "novelAssistant.model": {
+          "type": "string",
+          "default": "anthropic/claude-3.5-sonnet",
+          "description": "The model identifier (e.g., 'anthropic/claude-3.5-sonnet', 'gpt-4o')."
+        },
+        "novelAssistant.endpoint": {
+          "type": "string",
+          "default": "https://openrouter.ai/api/v1/chat/completions",
+          "description": "The API endpoint for chat completions. Automatically updated for known providers."
+        },
+        "novelAssistant.temperature": {
+          "type": "number",
+          "default": 0.7,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Controls randomness. Lower is more deterministic."
+        },
+        "novelAssistant.maxTokens": {
+          "type": "integer",
+          "default": 3000,
+          "description": "The maximum number of tokens to generate in a completion."
+        },
+        "novelAssistant.output.chapterLengthChars": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "default": [
+            3000,
+            7000
+          ],
+          "description": "Target character count range [min, max] for a generated chapter."
+        },
+        "novelAssistant.output.summarySentences": {
+          "type": "integer",
+          "default": 5,
+          "description": "Number of sentences for the auto-generated summary."
+        },
+        "novelAssistant.consistency.strictness": {
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium",
+          "description": "The strictness level for consistency checks."
+        },
+        "novelAssistant.providerOptions.openrouter.httpReferer": {
+          "type": "string",
+          "default": "",
+          "description": "(Optional) The HTTP-Referer header to send to OpenRouter."
+        },
+        "novelAssistant.providerOptions.openrouter.xTitle": {
+          "type": "string",
+          "default": "Novel Assistant for VS Code",
+          "description": "(Optional) The X-Title header to send to OpenRouter for identifying your app."
+        },
+        "novelAssistant.rateLimit.rpm": {
+          "type": "integer",
+          "default": 30,
+          "description": "Requests per minute limit."
+        },
+        "novelAssistant.rateLimit.burst": {
+          "type": "integer",
+          "default": 5,
+          "description": "Burst request allowance."
+        },
+        "novelAssistant.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable anonymous telemetry to help improve the extension."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "keytar": "^7.9.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5"
+  }
+}

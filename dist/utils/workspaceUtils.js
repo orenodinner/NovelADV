@@ -1,0 +1,126 @@
+"use strict";
+// src/utils/workspaceUtils.ts
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.getWorkspaceRoot = getWorkspaceRoot;
+exports.getNovelProjectRoot = getNovelProjectRoot;
+exports.getNovelConfigFileUri = getNovelConfigFileUri;
+exports.readFileContent = readFileContent;
+exports.writeFileContent = writeFileContent;
+exports.ensureDirectoryExists = ensureDirectoryExists;
+const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
+/**
+ * 現在のVS CodeワークスペースのルートURIを取得します。
+ * @returns {vscode.Uri} ワークスペースのルートURI
+ * @throws {Error} ワークスペースが開かれていない場合にエラーをスローします。
+ */
+function getWorkspaceRoot() {
+    if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+        throw new Error('No workspace folder is open. Please open your story project folder.');
+    }
+    return vscode.workspace.workspaceFolders[0].uri;
+}
+/**
+ * 小説プロジェクトのルートディレクトリを特定します。
+ * 現状はワークスペースルートに `.novelrc.json` があることを前提とします。
+ * @returns {Promise<vscode.Uri>} 小説プロジェクトのルートURI
+ * @throws {Error} プロジェクトが見つからない場合にエラーをスローします。
+ */
+async function getNovelProjectRoot() {
+    const root = getWorkspaceRoot();
+    const novelRcUri = vscode.Uri.joinPath(root, '.novelrc.json');
+    try {
+        await vscode.workspace.fs.stat(novelRcUri);
+        return root;
+    }
+    catch {
+        throw new Error('The current workspace is not a valid Novel Assistant project. ".novelrc.json" not found.');
+    }
+}
+/**
+ * 設定ファイル (.novelrc.json) のURIを取得します。
+ * @returns {Promise<vscode.Uri>} 設定ファイルのURI
+ */
+async function getNovelConfigFileUri() {
+    const projectRoot = await getNovelProjectRoot();
+    return vscode.Uri.joinPath(projectRoot, '.novelrc.json');
+}
+/**
+ * 指定されたURIのファイル内容を文字列として読み込みます。
+ * @param {vscode.Uri} fileUri 読み込むファイルのURI
+ * @returns {Promise<string>} ファイルの内容
+ * @throws {Error} ファイルの読み込みに失敗した場合にエラーをスローします。
+ */
+async function readFileContent(fileUri) {
+    try {
+        const fileContent = await vscode.workspace.fs.readFile(fileUri);
+        return new TextDecoder().decode(fileContent);
+    }
+    catch (error) {
+        console.error(`Failed to read file: ${fileUri.fsPath}`, error);
+        throw new Error(`Could not read file: ${path.basename(fileUri.fsPath)}`);
+    }
+}
+/**
+ * 指定されたURIのファイルに文字列を書き込みます。
+ * @param {vscode.Uri} fileUri 書き込むファイルのURI
+ * @param {string} content 書き込む内容
+ * @returns {Promise<void>}
+ * @throws {Error} ファイルの書き込みに失敗した場合にエラーをスローします。
+ */
+async function writeFileContent(fileUri, content) {
+    try {
+        await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(content));
+    }
+    catch (error) {
+        console.error(`Failed to write to file: ${fileUri.fsPath}`, error);
+        throw new Error(`Could not write to file: ${path.basename(fileUri.fsPath)}`);
+    }
+}
+/**
+ * 指定されたパスがディレクトリとして存在するか確認し、なければ作成します。
+ * @param dirUri 作成するディレクトリのURI
+ */
+async function ensureDirectoryExists(dirUri) {
+    try {
+        await vscode.workspace.fs.stat(dirUri);
+    }
+    catch {
+        // ディレクトリが存在しない場合は作成
+        await vscode.workspace.fs.createDirectory(dirUri);
+    }
+}
+//# sourceMappingURL=workspaceUtils.js.map
