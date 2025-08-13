@@ -45,12 +45,10 @@ class ChatPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-        // パネルがすでに存在する場合、それを表示する
         if (ChatPanel.currentPanel) {
             ChatPanel.currentPanel._panel.reveal(column);
             return;
         }
-        // パネルが存在しない場合、新しいパネルを作成する
         const panel = vscode.window.createWebviewPanel(ChatPanel.viewType, 'Novel Assistant Chat', column || vscode.ViewColumn.Two, {
             enableScripts: true,
             localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
@@ -61,11 +59,8 @@ class ChatPanel {
         this._disposables = [];
         this._panel = panel;
         this._extensionUri = extensionUri;
-        // WebviewのHTMLコンテンツを設定
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
-        // パネルが閉じられたときのイベントをリッスン
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-        // Webviewからのメッセージをリッスン
         this._panel.webview.onDidReceiveMessage(message => this._handleDidReceiveMessage(message), null, this._disposables);
     }
     dispose() {
@@ -83,6 +78,7 @@ class ChatPanel {
             case 'user-message':
                 this.handleUserMessage(message.text);
                 return;
+            // 'request-api-key-setup' は直接は使われないが、将来のために残す
             case 'request-api-key-setup':
                 this.setupApiKey();
                 return;
@@ -92,15 +88,11 @@ class ChatPanel {
         }
     }
     async handleUserMessage(text) {
-        // --- ここからが変更箇所 ---
         try {
-            // 1. コンテキストを構築
             this._panel.webview.postMessage({ command: 'llm-response-start' });
             const contextExtractor = new ContextExtractor_1.ContextExtractor();
             const context = await contextExtractor.buildContextForChapterGeneration();
             const template = await contextExtractor.getPromptTemplate('generation');
-            // 2. プロンプトを生成
-            // テンプレート内の {{placeholder}} を実際のコンテキストで置換
             const systemPrompt = template
                 .replace('{{characters}}', context.characters)
                 .replace('{{world}}', context.world)
@@ -113,7 +105,6 @@ class ChatPanel {
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: text }
             ];
-            // 3. LLMを呼び出し
             const provider = new OpenRouterProvider_1.OpenRouterProvider();
             const result = await provider.chat({
                 messages,
@@ -124,10 +115,23 @@ class ChatPanel {
             this._panel.webview.postMessage({ command: 'llm-response-end', fullText: result.text });
         }
         catch (error) {
-            vscode.window.showErrorMessage(`Error during chapter generation: ${error.message}`);
-            this._panel.webview.postMessage({ command: 'llm-response-error', error: error.message });
+            // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
+            const errorMessage = error.message || 'An unknown error occurred.';
+            // Webview UIにエラーを通知
+            this._panel.webview.postMessage({ command: 'llm-response-error', error: errorMessage });
+            // APIキー未設定のエラーを判定し、設定を促す
+            if (errorMessage.includes('API key is not set')) {
+                const action = await vscode.window.showWarningMessage('OpenRouter API key is not set. Please set it to use the chat.', 'Set API Key');
+                if (action === 'Set API Key') {
+                    this.setupApiKey();
+                }
+            }
+            else {
+                // その他のエラー
+                vscode.window.showErrorMessage(`Error during chapter generation: ${errorMessage}`);
+            }
+            // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
         }
-        // --- ここまでが変更箇所 ---
     }
     async setupApiKey() {
         const apiKey = await vscode.window.showInputBox({
@@ -139,8 +143,7 @@ class ChatPanel {
             try {
                 const keytarService = KeytarService_1.KeytarService.getInstance();
                 await keytarService.setApiKey('openrouter', apiKey);
-                vscode.window.showInformationMessage('OpenRouter API Key saved successfully.');
-                // Webviewにキーが設定されたことを通知
+                vscode.window.showInformationMessage('OpenRouter API Key saved successfully. You can now send your message again.');
                 this._panel.webview.postMessage({ command: 'api-key-set-success' });
             }
             catch (error) {
