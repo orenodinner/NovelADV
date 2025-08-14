@@ -15,6 +15,7 @@
     "onCommand:interactive-story.initializeProject",
     "onCommand:interactive-story.openChat",
     "onCommand:interactive-story.exportLogToMarkdown",
+    "onCommand:interactive-story.forkProject",
     "onWebviewPanel:interactive-story.chatView"
   ],
   "contributes": {
@@ -22,6 +23,11 @@
       {
         "command": "interactive-story.initializeProject",
         "title": "Story Game: Initialize New Scenario Project",
+        "category": "Interactive Story"
+      },
+      {
+        "command": "interactive-story.forkProject",
+        "title": "Story Game: Fork Scenario from Current Project",
         "category": "Interactive Story"
       },
       {

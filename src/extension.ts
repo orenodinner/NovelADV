@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { initializeProject } from './commands/initializeProject';
 import { exportLogToMarkdown } from './commands/exportLogToMarkdown';
+import { forkProject } from './commands/forkProject'; // 新規インポート
 import { ChatPanel } from './webview/ChatPanel';
 import { ConfigService } from './services/ConfigService';
 import { KeytarService } from './services/KeytarService';
@@ -21,16 +22,20 @@ export function activate(context: vscode.ExtensionContext) {
     const keytarService = KeytarService.getInstance();
     const sessionManager = SessionManager.getInstance();
 
-    // --- ▼▼▼ ここから修正 ▼▼▼ ---
     // 拡張機能の終了時にdisposeが呼ばれるように、各サービスを登録する
     context.subscriptions.push(configService);
     context.subscriptions.push(sessionManager);
-    // --- ▲▲▲ ここまで修正 ▲▲▲ ---
     
     // コマンドの登録
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.initializeProject', initializeProject)
     );
+
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    context.subscriptions.push(
+        vscode.commands.registerCommand('interactive-story.forkProject', forkProject)
+    );
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.openChat', () => {
