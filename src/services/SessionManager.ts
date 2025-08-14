@@ -5,11 +5,8 @@ import * as path from 'path';
 import { ChatMessage, SessionData } from '../types';
 import { StoryContextBuilder } from './StoryContextBuilder';
 import { SummarizerService } from './SummarizerService';
+import { CharacterUpdaterService } from './CharacterUpdaterService';
 import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists } from '../utils/workspaceUtils';
-
-// --- ▼▼▼ ここから修正 ▼▼▼ ---
-// ファイル冒頭の定数を削除
-// --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
 export class SessionManager implements vscode.Disposable {
     private static instance: SessionManager;
@@ -20,19 +17,20 @@ export class SessionManager implements vscode.Disposable {
 
     private contextBuilder: StoryContextBuilder;
     private summarizer: SummarizerService;
+    private characterUpdater: CharacterUpdaterService;
 
     private currentSessionFileUri: vscode.Uri | null = null;
     private isSummarizing: boolean = false;
-
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
-    // プロジェクト固有の設定を保持するプロパティ
-    private shortTermMemoryTurns: number = 10; // デフォルト値
-    private summarizationTriggerTurns: number = 15; // デフォルト値
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
+    
+    // --- ▼▼▼ ここから修正 ▼▼▼ ---
+    private shortTermMemoryMessages: number = 10; // デフォルト値
+    private summarizationTriggerMessages: number = 20; // デフォルト値
+    // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
     private constructor() {
         this.contextBuilder = new StoryContextBuilder();
         this.summarizer = SummarizerService.getInstance();
+        this.characterUpdater = CharacterUpdaterService.getInstance();
     }
     
     public dispose() {
@@ -48,10 +46,6 @@ export class SessionManager implements vscode.Disposable {
         return SessionManager.instance;
     }
 
-    // --- ▼▼▼ ここから新規メソッド追加 ▼▼▼ ---
-    /**
-     * プロジェクト設定ファイル(.storygamesetting.json)から設定を読み込む
-     */
     private async loadProjectSettings(): Promise<void> {
         try {
             const projectRoot = await getProjectRoot();
@@ -59,28 +53,43 @@ export class SessionManager implements vscode.Disposable {
             const content = await readFileContent(settingFileUri);
             const settings = JSON.parse(content);
 
-            if (settings.context && typeof settings.context.shortTermMemoryTurns === 'number') {
-                this.shortTermMemoryTurns = settings.context.shortTermMemoryTurns;
+            // --- ▼▼▼ ここから修正 ▼▼▼ ---
+            // 設定ファイルから読み込むキーを変更
+            if (settings.context && typeof settings.context.shortTermMemoryMessages === 'number') {
+                this.shortTermMemoryMessages = settings.context.shortTermMemoryMessages;
             } else {
-                this.shortTermMemoryTurns = 10; // デフォルト値
+                this.shortTermMemoryMessages = 10; // デフォルト値
             }
 
-            if (settings.context && typeof settings.context.summarizationTriggerTurns === 'number') {
-                this.summarizationTriggerTurns = settings.context.summarizationTriggerTurns;
+            if (settings.context && typeof settings.context.summarizationTriggerMessages === 'number') {
+                this.summarizationTriggerMessages = settings.context.summarizationTriggerMessages;
             } else {
-                this.summarizationTriggerTurns = 15; // デフォルト値
+                this.summarizationTriggerMessages = 20; // デフォルト値
             }
             
-            console.log(`Project settings loaded: shortTermMemoryTurns=${this.shortTermMemoryTurns}, summarizationTriggerTurns=${this.summarizationTriggerTurns}`);
+            console.log(`Project settings loaded: shortTermMemoryMessages=${this.shortTermMemoryMessages}, summarizationTriggerMessages=${this.summarizationTriggerMessages}`);
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         } catch (error) {
             console.warn("Could not load .storygamesetting.json. Using default context settings.", error);
-            // ファイルが読めない場合はデフォルト値のまま継続
-            this.shortTermMemoryTurns = 10;
-            this.summarizationTriggerTurns = 15;
+            this.shortTermMemoryMessages = 10;
+            this.summarizationTriggerMessages = 20;
         }
     }
-    // --- ▲▲▲ ここまで新規メソッド追加 ▲▲▲ ---
+    
+    private async updateLatestSummaryFile(): Promise<void> {
+        try {
+            const projectRoot = await getProjectRoot();
+            const summaryFileUri = vscode.Uri.joinPath(projectRoot, 'summaries', 'latest_summary.json');
+            const content = {
+                summary: this.summary || 'まだ要約はありません。',
+                updatedAt: new Date().toISOString()
+            };
+            await writeFileContent(summaryFileUri, JSON.stringify(content, null, 2));
+        } catch (error) {
+            console.error("Failed to update latest_summary.json", error);
+        }
+    }
 
     private async prepareNewSessionFiles(): Promise<void> {
         try {
@@ -130,16 +139,14 @@ export class SessionManager implements vscode.Disposable {
         }
 
         await this.archiveCurrentSession('session_restarted_');
-
-        // --- ▼▼▼ ここから修正 ▼▼▼ ---
-        // セッション開始時にプロジェクト設定を読み込む
+        
         await this.loadProjectSettings();
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         this.systemPrompt = await this.contextBuilder.buildInitialSystemPrompt();
         this.history = [];
         this.summary = '';
         await this.prepareNewSessionFiles();
+        await this.updateLatestSummaryFile();
 
         const openingMessage = await this.contextBuilder.getOpeningScene();
         await this.addMessage('assistant', openingMessage);
@@ -150,47 +157,58 @@ export class SessionManager implements vscode.Disposable {
         this.history.push({ role, content });
         await this.updateCurrentSessionFile();
 
-        if (role === 'assistant') {
-            await this.triggerSummarizationIfNeeded();
-        }
+        // ユーザーとアシスタントの両方のメッセージが追加された後にチェック
+        await this.triggerSummarizationIfNeeded();
     }
     
     private async triggerSummarizationIfNeeded(): Promise<void> {
-        const currentTurnCount = Math.floor(this.history.length / 2);
-        
         // --- ▼▼▼ ここから修正 ▼▼▼ ---
-        // ハードコードされた定数をプロパティに置き換え
-        if (this.isSummarizing || currentTurnCount < this.summarizationTriggerTurns) {
+        // ターン数ではなく、history配列の長さ（メッセージ数）で直接比較
+        if (this.isSummarizing || this.history.length < this.summarizationTriggerMessages) {
             return;
         }
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         this.isSummarizing = true;
+        console.log(`[Summarizer] Triggered at ${this.history.length} messages. Summarizing...`);
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         
         vscode.window.withProgress({
-            location: vscode.ProgressLocation.Window,
-            title: 'AI is summarizing the story...',
+            location: vscode.ProgressLocation.Notification,
+            title: 'Updating Story Memory...',
             cancellable: false
-        }, async () => {
+        }, async (progress) => {
             try {
                 // --- ▼▼▼ ここから修正 ▼▼▼ ---
-                // ハードコードされた定数をプロパティに置き換え
-                const turnsToSummarize = this.history.length - (this.shortTermMemoryTurns * 2);
+                // 残すメッセージ数に基づいて分割点を計算
+                const sliceIndex = this.history.length > this.shortTermMemoryMessages ? this.history.length - this.shortTermMemoryMessages : 0;
                 // --- ▲▲▲ ここまで修正 ▲▲▲ ---
-                const logToSummarize = this.history.slice(0, turnsToSummarize);
-                const remainingHistory = this.history.slice(turnsToSummarize);
+                
+                const logToSummarize = this.history.slice(0, sliceIndex);
+                const remainingHistory = this.history.slice(sliceIndex);
 
                 if (logToSummarize.length > 0) {
+                    progress.report({ message: 'Summarizing recent events...', increment: 50 });
                     const newSummary = await this.summarizer.summarize(this.summary, logToSummarize);
+                    
                     this.summary = newSummary;
                     this.history = remainingHistory;
+                    
+                    console.log("[Summarizer] New summary generated. History count reduced to:", this.history.length);
 
                     await this.updateCurrentSessionFile();
+                    await this.updateLatestSummaryFile();
+
+                    progress.report({ message: 'Updating character sheets...', increment: 50 });
+                    await this.characterUpdater.updateAllCharacters(newSummary);
+                } else {
+                     console.log("[Summarizer] No logs to summarize, skipping.");
                 }
-            } catch (error) {
-                console.error("Summarization process failed:", error);
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`Error during story memory update: ${error.message}`);
+                console.error("Summarization/Update process failed:", error);
             } finally {
                 this.isSummarizing = false;
+                console.log("[Summarizer] Process finished.");
             }
         });
     }
@@ -235,8 +253,8 @@ ${this.summary || "物語は始まったばかりです。"}
 `.trim();
 
         // --- ▼▼▼ ここから修正 ▼▼▼ ---
-        // ハードコードされた定数をプロパティに置き換え
-        const recentHistory = this.history.slice(-(this.shortTermMemoryTurns * 2));
+        // メッセージ数で履歴を切り出す
+        const recentHistory = this.history.slice(-this.shortTermMemoryMessages);
         // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         
         return [{ role: 'system', content: fullSystemPrompt }, ...recentHistory];
@@ -281,10 +299,7 @@ ${this.summary || "物語は始まったばかりです。"}
             const loadedData: SessionData = JSON.parse(content);
 
             if (loadedData.systemPrompt && loadedData.history) {
-                // --- ▼▼▼ ここから修正 ▼▼▼ ---
-                // ロード時にもプロジェクト設定を再読み込みする
                 await this.loadProjectSettings();
-                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
                 
                 this.systemPrompt = loadedData.systemPrompt;
                 this.history = loadedData.history;
@@ -292,6 +307,7 @@ ${this.summary || "物語は始まったばかりです。"}
 
                 await this.prepareNewSessionFiles();
                 await this.updateCurrentSessionFile();
+                await this.updateLatestSummaryFile();
                 
                 vscode.window.showInformationMessage(`Session loaded from ${selectedFile}`);
                 return this.history;

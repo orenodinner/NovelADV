@@ -28,6 +28,39 @@ async function copyScenarioDirectory(sourceProjectRoot: vscode.Uri, newProjectRo
 }
 
 /**
+ * 新規プロジェクトに必要なデフォルトファイルを作成する
+ * @param newProjectRoot 新しいプロジェクトのルートURI
+ */
+async function createDefaultFiles(newProjectRoot: vscode.Uri) {
+    const fs = vscode.workspace.fs;
+    const encoder = new TextEncoder();
+
+    // --- ▼▼▼ ここから修正 ▼▼▼ ---
+    const settingFileContent = `{
+  "$schema": "https://example.com/storygamesetting.schema.json",
+  "llmProvider": "openrouter",
+  "llmModel": "anthropic/claude-3.5-sonnet",
+  "context": {
+    "shortTermMemoryMessages": 10,
+    "summarizationTriggerMessages": 20
+  }
+}`;
+    // --- ▲▲▲ ここまで修正 ▲▲▲ ---
+    const settingFilePath = vscode.Uri.joinPath(newProjectRoot, '.storygamesetting.json');
+    await fs.writeFile(settingFilePath, encoder.encode(settingFileContent));
+    
+    const gitignoreContent = 'logs/\nexports/\nsummaries/\n.vscode/\nnode_modules/';
+    const gitignorePath = vscode.Uri.joinPath(newProjectRoot, '.gitignore');
+    await fs.writeFile(gitignorePath, encoder.encode(gitignoreContent));
+    
+    const summaryFileContent = `{
+  "summary": "まだ要約はありません。"
+}`;
+    const summaryFilePath = vscode.Uri.joinPath(newProjectRoot, 'summaries', 'latest_summary.json');
+    await fs.writeFile(summaryFilePath, encoder.encode(summaryFileContent));
+}
+
+/**
  * メインの実行関数
  */
 export async function forkProject() {
@@ -78,25 +111,7 @@ export async function forkProject() {
                 await fs.createDirectory(vscode.Uri.joinPath(newProjectRoot, dir));
             }
             
-            // --- ▼▼▼ ここから修正 ▼▼▼ ---
-            // .storygamesetting.json の内容を initializeProject と同じにする
-            const settingFileContent = `{
-  "$schema": "https://example.com/storygamesetting.schema.json",
-  "llmProvider": "openrouter",
-  "llmModel": "anthropic/claude-3.5-sonnet",
-  "context": {
-    "shortTermMemoryTurns": 10,
-    "summarizationTriggerTurns": 15
-  }
-}`;
-            const encoder = new TextEncoder();
-            const settingFilePath = vscode.Uri.joinPath(newProjectRoot, '.storygamesetting.json');
-            await fs.writeFile(settingFilePath, encoder.encode(settingFileContent));
-            
-            const gitignoreContent = 'logs/\nexports/\nsummaries/\n.vscode/\nnode_modules/';
-            const gitignorePath = vscode.Uri.joinPath(newProjectRoot, '.gitignore');
-            await fs.writeFile(gitignorePath, encoder.encode(gitignoreContent));
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
+            await createDefaultFiles(newProjectRoot);
 
             progress.report({ message: 'Copying scenario from source project...', increment: 60 });
             await copyScenarioDirectory(sourceProjectRoot, newProjectRoot);

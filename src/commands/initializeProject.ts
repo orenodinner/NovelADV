@@ -5,18 +5,48 @@ import * as path from 'path';
 
 // --- ファイルテンプレート ---
 
-// --- ▼▼▼ ここから修正 ▼▼▼ ---
 const STORYGAMESETTING_JSON_CONTENT = `{
   "$schema": "https://example.com/storygamesetting.schema.json",
   "llmProvider": "openrouter",
   "llmModel": "anthropic/claude-3.5-sonnet",
   "context": {
-    "shortTermMemoryTurns": 10,
-    "summarizationTriggerTurns": 15
+    "shortTermMemoryMessages": 3,
+    "summarizationTriggerMessages": 6
   }
 }
 `;
-// --- ▲▲▲ ここまで修正 ▲▲▲ ---
+
+const LATEST_SUMMARY_JSON_CONTENT = `{
+  "summary": "まだ要約はありません。"
+}`;
+
+// --- ▼▼▼ ここから新規テンプレート追加 ▼▼▼ ---
+const CHARACTER_UPDATE_PROMPT_MD_CONTENT = `# 指示
+あなたは、物語の進行に応じてキャラクター設定を更新するアシスタントです。
+以下の「キャラクターの既存設定」と「最新の物語の要約」を読み、キャラクターの性格、プレイヤーとの関係性、状況などに変化があれば、設定ファイルを更新してください。
+
+## ルール
+- **変更は最小限に**: 物語の要約から明確に読み取れる変化のみを反映させてください。推測や創作は避けてください。
+- **マークダウン形式を維持**: 元のファイルの書式（箇条書き、見出しなど）を維持してください。
+- **客観的な事実を記述**: 「〜という出来事を経験した」「プレイヤーに対して〜という感情を抱いている」のように、客観的な事実や明確な心情を記述してください。
+- **変化がない場合は変更しない**: 物語の要約を読んでもキャラクターに特筆すべき変化がない場合は、既存の設定をそのまま出力してください。
+- **出力はキャラクター設定の全文**: 更新後のキャラクター設定ファイル全体を出力してください。
+
+---
+
+## キャラクターの既存設定
+{{character_sheet}}
+
+---
+
+## 最新の物語の要約
+{{story_summary}}
+
+---
+
+## 更新されたキャラクター設定
+`;
+// --- ▲▲▲ ここまで新規テンプレート追加 ▲▲▲ ---
 
 const WORLD_SETTING_MD_CONTENT = `# 舞台設定
 # このファイルに、物語の基本的な世界観や背景を記述します。
@@ -80,7 +110,7 @@ const NARUSE_MAI_MD_CONTENT = `# キャラクター設定: 成瀬 真衣
 `;
 
 const SUMMARIZATION_PROMPT_MD_CONTENT = `# 指示
-あなたは、対話形式の物語の会話ログを要約するアシスタントです。
+あなたは、対話形式の物語の会話ログを要약するアシスタントです。
 以下のルールに従って、これまでの「物語の要約」に、新しい「会話ログ」の内容を追記・統合し、更新された要約を作成してください。
 
 ## ルール
@@ -176,9 +206,11 @@ export async function initializeProject() {
 
             progress.report({ message: 'Creating scenario files...', increment: 40 });
             
+            // --- ▼▼▼ ここから修正 ▼▼▼ ---
             const filesToCreate: { filePath: string; content: string }[] = [
                 { filePath: '.storygamesetting.json', content: STORYGAMESETTING_JSON_CONTENT },
                 { filePath: '.gitignore', content: GITIGNORE_CONTENT },
+                { filePath: path.join('summaries', 'latest_summary.json'), content: LATEST_SUMMARY_JSON_CONTENT },
                 { filePath: path.join('scenario', '00_world_setting.md'), content: WORLD_SETTING_MD_CONTENT },
                 { filePath: path.join('scenario', '01_player_character.md'), content: PLAYER_CHARACTER_MD_CONTENT },
                 { filePath: path.join('scenario', '02_ai_rules.md', ), content: AI_RULES_MD_CONTENT },
@@ -186,7 +218,9 @@ export async function initializeProject() {
                 { filePath: path.join('scenario', 'characters', 'chris_under.md'), content: CHRIS_UNDER_MD_CONTENT },
                 { filePath: path.join('scenario', 'characters', 'naruse_mai.md'), content: NARUSE_MAI_MD_CONTENT },
                 { filePath: path.join('scenario', 'prompts', 'summarization_prompt.md'), content: SUMMARIZATION_PROMPT_MD_CONTENT },
+                { filePath: path.join('scenario', 'prompts', 'character_update_prompt.md'), content: CHARACTER_UPDATE_PROMPT_MD_CONTENT },
             ];
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             
             const encoder = new TextEncoder();
             for (const file of filesToCreate) {
