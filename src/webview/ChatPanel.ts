@@ -127,10 +127,12 @@ export class ChatPanel {
 
     private async handleUserMessage(text: string) {
         try {
+            // このaddMessageの後、SessionManager内部で要約がトリガーされる可能性がある
             await this.sessionManager.addMessage('user', text);
             
             this._panel.webview.postMessage({ command: 'llm-response-start' });
             
+            // このgetHistoryForLLMは、要約を含んだシステムプロンプトを生成する
             const messages = this.sessionManager.getHistoryForLLM();
             
             const provider = new OpenRouterProvider();

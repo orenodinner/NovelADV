@@ -12,19 +12,26 @@ import { SessionData, ChatMessage } from '../types';
  */
 async function selectLogFile(logsRootUri: vscode.Uri): Promise<vscode.Uri | null> {
     try {
-        const allDirs = (await vscode.workspace.fs.readDirectory(logsRootUri))
-            .filter(([name, type]) => type === vscode.FileType.Directory)
-            .map(([name, _]) => name);
-
-        // 'autosaves'とその他の手動保存ディレクトリを含める
-        const logFolders = ['autosaves', ...allDirs.filter(dir => dir !== 'autosaves')];
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // 選択対象のフォルダを archives と autosaves にする
+        const logFolders = ['archives', 'autosaves'];
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         const selectedFolder = await vscode.window.showQuickPick(logFolders, {
-            placeHolder: "Select the folder containing the log file"
+            placeHolder: "Select the folder containing the log file ('archives' for backups)"
         });
         if (!selectedFolder) return null;
 
         const targetDirUri = vscode.Uri.joinPath(logsRootUri, selectedFolder);
+        
+        // フォルダが存在しない場合を考慮
+        try {
+            await vscode.workspace.fs.stat(targetDirUri);
+        } catch {
+             vscode.window.showInformationMessage(`Folder '${selectedFolder}' does not exist yet.`);
+             return null;
+        }
+
         const allFiles = (await vscode.workspace.fs.readDirectory(targetDirUri))
             .filter(([name, type]) => type === vscode.FileType.File && name.endsWith('.json'))
             .map(([name, _]) => name)
@@ -64,10 +71,8 @@ function formatHistoryToMarkdown(history: ChatMessage[]): string {
         if (message.role === 'user') {
             markdownContent += `**You:**\n${message.content}\n\n`;
         } else if (message.role === 'assistant') {
-            // アシスタントの応答は、物語の本文としてそのまま出力し、区切り線を入れる
             markdownContent += `${message.content}\n\n---\n\n`;
         }
-        // 'system' メッセージは通常、対話ログには含めないため無視
     });
 
     return markdownContent;
@@ -84,10 +89,9 @@ export async function exportLogToMarkdown() {
         
         const selectedLogUri = await selectLogFile(logsRootUri);
         if (!selectedLogUri) {
-            return; // ユーザーが選択をキャンセル
+            return;
         }
 
-        // 1. JSONファイルを読み込み、パースする
         const jsonContent = await readFileContent(selectedLogUri);
         const sessionData: SessionData = JSON.parse(jsonContent);
 
@@ -96,21 +100,26 @@ export async function exportLogToMarkdown() {
             return;
         }
         
-        // 2. 対話履歴をMarkdown文字列に変換する
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // Markdownに要約も出力する
         let markdownOutput = `# Story Log Export\n\n`;
         markdownOutput += `*Exported from: ${path.basename(selectedLogUri.fsPath)}*\n`;
         markdownOutput += `*Exported on: ${new Date().toLocaleString()}*\n\n`;
         
-        // システムプロンプト（設定）もヘッダーとして追加
         if(sessionData.systemPrompt) {
             markdownOutput += `## Scenario Settings (System Prompt)\n\n`;
             markdownOutput += `\`\`\`\n${sessionData.systemPrompt}\n\`\`\`\n\n`;
         }
-        
-        markdownOutput += `## Story Conversation\n\n---\n\n`;
-        markdownOutput += formatHistoryToMarkdown(sessionData.history);
 
-        // 3. Markdownファイルを保存する
+        if(sessionData.summary) {
+            markdownOutput += `## Story Summary (Long-term Memory)\n\n`;
+            markdownOutput += `${sessionData.summary}\n\n`;
+        }
+        
+        markdownOutput += `## Recent Conversation (Short-term Memory)\n\n---\n\n`;
+        markdownOutput += formatHistoryToMarkdown(sessionData.history);
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
+
         const exportsDirUri = vscode.Uri.joinPath(projectRoot, 'exports');
         await ensureDirectoryExists(exportsDirUri);
         
@@ -120,7 +129,6 @@ export async function exportLogToMarkdown() {
 
         await writeFileContent(outputUri, markdownOutput);
 
-        // 4. ユーザーに通知し、ファイルを開くオプションを提供する
         const openAction = 'Open Exported File';
         const selection = await vscode.window.showInformationMessage(
             `Successfully exported log to '${markdownFileName}'.`,

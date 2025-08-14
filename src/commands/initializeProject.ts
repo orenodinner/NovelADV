@@ -77,14 +77,40 @@ const NARUSE_MAI_MD_CONTENT = `# キャラクター設定: 成瀬 真衣
 - 役職：捜査官
 `;
 
-// --- .gitignoreテンプレート ---
+const SUMMARIZATION_PROMPT_MD_CONTENT = `# 指示
+あなたは、対話形式の物語の会話ログを要約するアシスタントです。
+以下のルールに従って、これまでの「物語の要約」に、新しい「会話ログ」の内容を追記・統合し、更新された要約を作成してください。
+
+## ルール
+- 箇条書き形式で、物語の重要な出来事、キャラクターの行動、心情の変化、新しい発見などを簡潔に記述してください。
+- 既存の要約の流れを汲み取り、時系列が自然につながるように新しい出来事を追記してください。
+- 些細な会話や描写は省略し、物語の根幹に関わる部分だけを抽出してください。
+- 要約は常に過去形で記述してください。（例：「〜した。」、「〜と感じた。」）
+- 主人公（プレイヤー）の視点から記述してください。
+
+---
+
+## これまでの物語の要約
+{{previous_summary}}
+
+---
+
+## 新しい会話ログ
+{{new_log}}
+
+---
+
+## 更新された物語の要約
+`;
+
 const GITIGNORE_CONTENT = `
 # VS Code
 .vscode/
 
-# Logs and Exports
+# Logs, Exports, and Summaries
 logs/
 exports/
+summaries/
 
 # Node
 node_modules/
@@ -133,28 +159,35 @@ export async function initializeProject() {
             progress.report({ message: 'Creating directories...', increment: 10 });
             
             // --- ▼▼▼ ここから修正 ▼▼▼ ---
-            // logs/autosaves と exports ディレクトリも作成
-            const dirs = ['scenario', 'scenario/characters', 'logs', 'logs/autosaves', 'exports'];
+            // logs/archives ディレクトリも追加
+            const dirs = [
+                'scenario', 
+                'scenario/characters', 
+                'scenario/prompts',
+                'logs', 
+                'logs/autosaves',
+                'logs/archives', // バックアップ用
+                'exports',
+                'summaries'
+            ];
             // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             for (const dir of dirs) {
                 await fs.createDirectory(vscode.Uri.joinPath(projectRoot, dir));
             }
 
             progress.report({ message: 'Creating scenario files...', increment: 40 });
-
-            // --- ▼▼▼ ここから修正 ▼▼▼ ---
-            // .gitignore ファイルも追加
+            
             const filesToCreate: { filePath: string; content: string }[] = [
                 { filePath: '.storygamesetting.json', content: STORYGAMESETTING_JSON_CONTENT },
                 { filePath: '.gitignore', content: GITIGNORE_CONTENT },
                 { filePath: path.join('scenario', '00_world_setting.md'), content: WORLD_SETTING_MD_CONTENT },
                 { filePath: path.join('scenario', '01_player_character.md'), content: PLAYER_CHARACTER_MD_CONTENT },
-                { filePath: path.join('scenario', '02_ai_rules.md'), content: AI_RULES_MD_CONTENT },
+                { filePath: path.join('scenario', '02_ai_rules.md', ), content: AI_RULES_MD_CONTENT },
                 { filePath: path.join('scenario', '03_opening_scene.md'), content: OPENING_SCENE_MD_CONTENT },
                 { filePath: path.join('scenario', 'characters', 'chris_under.md'), content: CHRIS_UNDER_MD_CONTENT },
                 { filePath: path.join('scenario', 'characters', 'naruse_mai.md'), content: NARUSE_MAI_MD_CONTENT },
+                { filePath: path.join('scenario', 'prompts', 'summarization_prompt.md'), content: SUMMARIZATION_PROMPT_MD_CONTENT },
             ];
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             
             const encoder = new TextEncoder();
             for (const file of filesToCreate) {

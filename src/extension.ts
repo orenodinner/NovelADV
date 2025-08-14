@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { initializeProject } from './commands/initializeProject';
-import { exportLogToMarkdown } from './commands/exportLogToMarkdown'; // 新規インポート
+import { exportLogToMarkdown } from './commands/exportLogToMarkdown';
 import { ChatPanel } from './webview/ChatPanel';
 import { ConfigService } from './services/ConfigService';
 import { KeytarService } from './services/KeytarService';
@@ -20,7 +20,12 @@ export function activate(context: vscode.ExtensionContext) {
     const configService = ConfigService.getInstance();
     const keytarService = KeytarService.getInstance();
     const sessionManager = SessionManager.getInstance();
-    context.subscriptions.push({ dispose: () => configService.dispose() });
+
+    // --- ▼▼▼ ここから修正 ▼▼▼ ---
+    // 拡張機能の終了時にdisposeが呼ばれるように、各サービスを登録する
+    context.subscriptions.push(configService);
+    context.subscriptions.push(sessionManager);
+    // --- ▲▲▲ ここまで修正 ▲▲▲ ---
     
     // コマンドの登録
     context.subscriptions.push(
@@ -33,11 +38,9 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.exportLogToMarkdown', exportLogToMarkdown)
     );
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 }
 
 /**

@@ -21,9 +21,12 @@ export class OpenRouterProvider implements ChatProvider {
         const config = this.configService.get();
         const apiKey = await this.keytarService.getApiKey('openrouter');
 
-        if (!apiKey) {
-            throw new Error('OpenRouter API key is not set. Please set it via the command palette.');
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // APIキーがnull、または空文字列の場合にエラーをスローする
+        if (!apiKey || apiKey.trim() === '') {
+            throw new Error('API key is not set. Please set it to continue.');
         }
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         const headers: Record<string, string> = {
             'Authorization': `Bearer ${apiKey}`,
@@ -42,14 +45,14 @@ export class OpenRouterProvider implements ChatProvider {
             messages: options.messages,
             temperature: options.temperature ?? config.temperature,
             max_tokens: options.maxTokens ?? config.maxTokens,
-            stream: typeof options.onStream === 'function', // ストリーミングを有効にするか
+            stream: typeof options.onStream === 'function',
         };
 
         try {
             const response = await axios.post(config.endpoint, body, {
                 headers: headers,
                 responseType: body.stream ? 'stream' : 'json',
-                signal: options.abortSignal, // axiosはAbortSignalをサポート
+                signal: options.abortSignal,
             });
             
             if (body.stream) {
@@ -63,12 +66,18 @@ export class OpenRouterProvider implements ChatProvider {
             }
 
         } catch (error) {
+            // --- ▼▼▼ ここから修正 ▼▼▼ ---
             if (error instanceof AxiosError) {
+                // 401 Unauthorized エラーの場合は、キーが不正である可能性が高い
+                if (error.response?.status === 401) {
+                    throw new Error('API key is not set or invalid (401 Unauthorized). Please set it.');
+                }
                 const errorData = error.response?.data;
                 const errorMessage = errorData?.error?.message || error.message;
                 console.error('OpenRouter API Error:', errorData);
                 throw new Error(`OpenRouter API Error: ${errorMessage}`);
             }
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             console.error('Unknown error during API call:', error);
             throw new Error('An unknown error occurred while communicating with OpenRouter.');
         }
@@ -85,9 +94,8 @@ export class OpenRouterProvider implements ChatProvider {
             stream.on('data', (chunk: Buffer) => {
                 buffer += chunk.toString('utf-8');
                 
-                // ストリームは `data: ...\n\n` の形式で送られてくる
                 const lines = buffer.split('\n\n');
-                buffer = lines.pop() || ''; // 最後の不完全な行をバッファに残す
+                buffer = lines.pop() || '';
 
                 for (const line of lines) {
                     if (line.startsWith('data: ')) {

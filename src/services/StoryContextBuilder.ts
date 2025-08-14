@@ -59,7 +59,8 @@ export class StoryContextBuilder {
     }
 
     /**
-     * ゲーム開始時にLLMに渡すシステムプロンプトを構築する
+     * ゲーム開始時にLLMに渡す基本的なシステムプロンプトを構築する
+     * (このプロンプトに、後からSessionManagerが要約などを追加する)
      * @returns {Promise<string>} 結合されたシステムプロンプト文字列
      */
     public async buildInitialSystemPrompt(): Promise<string> {

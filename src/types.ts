@@ -54,9 +54,10 @@ export interface ChatProvider {
   chat(options: ChatCompletionOptions): Promise<ChatCompletionResult>;
 }
 
-// 4. セッションデータモデル (新規追加)
+// 4. セッションデータモデル (summaryを追加)
 export interface SessionData {
     systemPrompt: string | null;
     history: ChatMessage[];
+    summary: string; // --- ▼▼▼ ここから追加 ▼▼▼ ---
     autoSaveJsonPath?: string;
 }

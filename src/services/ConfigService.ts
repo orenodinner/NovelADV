@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { StoryGameConfig, StoryGameConfigSchema } from '../types';
 
-export class ConfigService {
+export class ConfigService implements vscode.Disposable { // --- ▼▼▼ ここを修正 ▼▼▼ ---
     private static instance: ConfigService;
     private config: StoryGameConfig | null = null;
     private readonly disposables: vscode.Disposable[] = [];
@@ -11,7 +11,6 @@ export class ConfigService {
     private constructor() {
         this.loadConfig();
         
-        // 設定が変更されたらリロードする
         const disposable = vscode.workspace.onDidChangeConfiguration(e => {
             if (e.affectsConfiguration('interactive-story')) {
                 this.loadConfig();
@@ -19,6 +18,16 @@ export class ConfigService {
         });
         this.disposables.push(disposable);
     }
+
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    /**
+     * インスタンスを破棄する
+     */
+    public dispose() {
+        this.disposables.forEach(d => d.dispose());
+        ConfigService.instance = undefined!;
+    }
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     public static getInstance(): ConfigService {
         if (!ConfigService.instance) {
@@ -33,7 +42,6 @@ export class ConfigService {
     private loadConfig(): void {
         const rawConfig = vscode.workspace.getConfiguration('interactive-story');
         
-        // package.jsonから設定をマージ
         const configObject = {
             provider: rawConfig.get('provider'),
             model: rawConfig.get('model'),
@@ -67,18 +75,11 @@ export class ConfigService {
      */
     public get(): StoryGameConfig {
         if (!this.config) {
-            this.loadConfig(); // 設定がnullの場合、再読み込みを試みる
-            if (!this.config) { //それでもnullならエラー
+            this.loadConfig();
+            if (!this.config) {
                  throw new Error('Interactive Story Game configuration is not loaded or invalid.');
             }
         }
         return this.config;
-    }
-
-    /**
-     * 拡張機能の無効化時にリソースを解放する
-     */
-    public dispose() {
-        this.disposables.forEach(d => d.dispose());
     }
 }
