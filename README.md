@@ -1,3 +1,5 @@
+# まだ開発中
+
 # NovelADV
 
 [![Visual Studio Marketplace](https://img.shields.io/badge/VS%20Code-Extension-blue.svg)](https://marketplace.visualstudio.com/VSCode)
