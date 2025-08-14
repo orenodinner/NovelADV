@@ -38,6 +38,7 @@ exports.getWorkspaceRoot = getWorkspaceRoot;
 exports.getProjectRoot = getProjectRoot;
 exports.readFileContent = readFileContent;
 exports.writeFileContent = writeFileContent;
+exports.appendFileContent = appendFileContent;
 exports.ensureDirectoryExists = ensureDirectoryExists;
 const vscode = __importStar(require("vscode"));
 const path = __importStar(require("path"));
@@ -100,6 +101,33 @@ async function writeFileContent(fileUri, content) {
     catch (error) {
         console.error(`Failed to write to file: ${fileUri.fsPath}`, error);
         throw new Error(`Could not write to file: ${path.basename(fileUri.fsPath)}`);
+    }
+}
+/**
+ * 指定されたURIのファイルに文字列を追記します。ファイルが存在しない場合は新規作成します。
+ * @param {vscode.Uri} fileUri 追記するファイルのURI
+ * @param {string} content 追記する内容
+ * @returns {Promise<void>}
+ */
+async function appendFileContent(fileUri, content) {
+    try {
+        let existingContent = '';
+        try {
+            const fileContent = await vscode.workspace.fs.readFile(fileUri);
+            existingContent = new TextDecoder().decode(fileContent);
+        }
+        catch (error) {
+            // ファイルが存在しない場合は、existingContentは空のまま
+            if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) {
+                throw error;
+            }
+        }
+        const newContent = existingContent + content;
+        await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(newContent));
+    }
+    catch (error) {
+        console.error(`Failed to append to file: ${fileUri.fsPath}`, error);
+        throw new Error(`Could not append to file: ${path.basename(fileUri.fsPath)}`);
     }
 }
 /**

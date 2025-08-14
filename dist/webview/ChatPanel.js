@@ -45,16 +45,35 @@ class ChatPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // パネルが既に存在する場合、再表示して最新の履歴を送信する
         if (ChatPanel.currentPanel) {
             ChatPanel.currentPanel._panel.reveal(column);
+            ChatPanel.currentPanel.restoreHistory(); // 履歴を復元するメソッドを呼び出す
             return;
         }
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         const panel = vscode.window.createWebviewPanel(ChatPanel.viewType, 'Interactive Story Chat', column || vscode.ViewColumn.Two, {
             enableScripts: true,
+            // --- ▼▼▼ ここから追加 ▼▼▼ ---
+            // 非表示になってもWebviewの状態を維持する
+            retainContextWhenHidden: true,
+            // --- ▲▲▲ ここまで追加 ▲▲▲ ---
             localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
         });
         ChatPanel.currentPanel = new ChatPanel(panel, extensionUri);
     }
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    /**
+     * Webviewに現在の対話履歴を送信してUIを復元させる
+     */
+    restoreHistory() {
+        const history = this.sessionManager.getHistory(); // SessionManagerに現在の履歴を取得するメソッドを追加する必要がある
+        if (history && history.length > 0) {
+            this._panel.webview.postMessage({ command: 'load-history', history: history });
+        }
+    }
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
     constructor(panel, extensionUri) {
         this._disposables = [];
         this._panel = panel;
@@ -77,8 +96,15 @@ class ChatPanel {
     async _handleWebviewMessage(message) {
         switch (message.command) {
             case 'webview-ready':
-                // Webviewの準備ができたらゲームを開始する
-                await this.startGame();
+                // --- ▼▼▼ ここから修正 ▼▼▼ ---
+                // 履歴が空の場合のみ新規ゲーム開始、そうでなければ履歴を復元
+                if (this.sessionManager.getHistory().length === 0) {
+                    await this.startGame();
+                }
+                else {
+                    this.restoreHistory();
+                }
+                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
                 return;
             case 'user-message':
                 await this.handleUserMessage(message.text);
@@ -111,7 +137,7 @@ class ChatPanel {
     }
     async handleUserMessage(text) {
         try {
-            this.sessionManager.addMessage('user', text);
+            await this.sessionManager.addMessage('user', text);
             this._panel.webview.postMessage({ command: 'llm-response-start' });
             const messages = this.sessionManager.getHistoryForLLM();
             const provider = new OpenRouterProvider_1.OpenRouterProvider();
@@ -121,7 +147,7 @@ class ChatPanel {
                     this._panel.webview.postMessage({ command: 'llm-response-chunk', chunk });
                 },
             });
-            this.sessionManager.addMessage('assistant', result.text);
+            await this.sessionManager.addMessage('assistant', result.text);
             this._panel.webview.postMessage({ command: 'llm-response-end', fullText: result.text });
         }
         catch (error) {

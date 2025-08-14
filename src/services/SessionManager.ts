@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { ChatMessage } from '../types';
 import { StoryContextBuilder } from './StoryContextBuilder';
-import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists } from '../utils/workspaceUtils';
+import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists, appendFileContent } from '../utils/workspaceUtils';
 
 const MAX_HISTORY_LENGTH = 20; // LLMに渡す直近の対話履歴の最大数
 
@@ -12,6 +12,7 @@ export class SessionManager {
     private systemPrompt: string | null = null;
     private history: ChatMessage[] = [];
     private contextBuilder: StoryContextBuilder;
+    private autoSaveFileUri: vscode.Uri | null = null;
 
     constructor() {
         this.contextBuilder = new StoryContextBuilder();
@@ -19,25 +20,87 @@ export class SessionManager {
 
     /**
      * 新しいゲームセッションを開始する
-     * システムプロンプトを構築し、オープニングメッセージを取得する
+     * システムプロンプトを構築し、オープニングメッセージを取得し、自動保存ファイルを準備する
      * @returns {Promise<string>} オープニングメッセージ
      */
     public async startNewSession(): Promise<string> {
         this.systemPrompt = await this.contextBuilder.buildInitialSystemPrompt();
         this.history = [];
+        await this.prepareAutoSaveFile();
         const openingMessage = await this.contextBuilder.getOpeningScene();
-        this.addMessage('assistant', openingMessage);
+        await this.addMessage('assistant', openingMessage);
         return openingMessage;
     }
 
     /**
-     * 対話履歴にメッセージを追加する
+     * 対話履歴にメッセージを追加し、自動保存を実行する
      * @param role メッセージの役割 ('user' or 'assistant')
      * @param content メッセージの内容
      */
-    public addMessage(role: 'user' | 'assistant', content: string): void {
+    public async addMessage(role: 'user' | 'assistant', content: string): Promise<void> {
         this.history.push({ role, content });
+        await this.autoSaveMessage(role, content);
     }
+
+    /**
+     * 自動保存用のMarkdownファイルを準備する
+     */
+    private async prepareAutoSaveFile(): Promise<void> {
+        try {
+            const projectRoot = await getProjectRoot();
+            const storiesDirUri = vscode.Uri.joinPath(projectRoot, 'stories');
+            await ensureDirectoryExists(storiesDirUri);
+    
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const fileName = `story_${timestamp}.md`;
+            this.autoSaveFileUri = vscode.Uri.joinPath(storiesDirUri, fileName);
+    
+            const playerInfo = (await this.contextBuilder.buildInitialSystemPrompt())
+                .split('## 主人公（プレイヤー）の情報')[1]
+                .split('---')[0]
+                .trim();
+            
+            const title = `# Story Log: ${new Date().toLocaleString()}\n\n`;
+            const header = `## 主人公\n${playerInfo}\n\n---\n\n`;
+            
+            await writeFileContent(this.autoSaveFileUri, title + header);
+            
+        } catch (error: any) {
+            console.error("Failed to prepare auto-save file:", error);
+            vscode.window.showErrorMessage(`Failed to prepare auto-save file: ${error.message}`);
+            this.autoSaveFileUri = null;
+        }
+    }
+
+    /**
+     * メッセージをMarkdown形式でファイルに追記する
+     * @param role 
+     * @param content 
+     */
+    private async autoSaveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
+        if (!this.autoSaveFileUri) return;
+
+        try {
+            const formattedMessage = role === 'user' 
+                ? `**You:**\n${content}\n\n` 
+                : `${content}\n\n---\n\n`;
+            
+            await appendFileContent(this.autoSaveFileUri, formattedMessage);
+
+        } catch (error: any) {
+            console.error("Failed to auto-save message:", error);
+        }
+    }
+
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    /**
+     * 現在の対話履歴（セッション）を取得する
+     * @returns {ChatMessage[]}
+     */
+    public getHistory(): ChatMessage[] {
+        return this.history;
+    }
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     /**
      * LLMに渡すためのメッセージ配列を取得する
@@ -48,7 +111,6 @@ export class SessionManager {
         if (!this.systemPrompt) {
             throw new Error("Session has not been started. Call startNewSession() first.");
         }
-        // システムプロンプト + 直近の対話履歴
         const recentHistory = this.history.slice(-MAX_HISTORY_LENGTH);
         return [{ role: 'system', content: this.systemPrompt }, ...recentHistory];
     }
@@ -73,7 +135,8 @@ export class SessionManager {
 
         const dataToSave = {
             systemPrompt: this.systemPrompt,
-            history: this.history
+            history: this.history,
+            autoSaveFilePath: this.autoSaveFileUri?.fsPath
         };
 
         try {
@@ -93,12 +156,13 @@ export class SessionManager {
         const logsDirUri = vscode.Uri.joinPath(projectRoot, 'logs');
 
         try {
+            await ensureDirectoryExists(logsDirUri);
             const allFiles = await vscode.workspace.fs.readDirectory(logsDirUri);
             const sessionFiles = allFiles
                 .filter(([name, type]) => type === vscode.FileType.File && name.startsWith('session_') && name.endsWith('.json'))
                 .map(([name, _]) => name)
                 .sort()
-                .reverse(); // 新しい順にソート
+                .reverse(); 
 
             if (sessionFiles.length === 0) {
                 vscode.window.showInformationMessage("No saved sessions found.");
@@ -115,13 +179,14 @@ export class SessionManager {
             const content = await readFileContent(fileUri);
             const loadedData = JSON.parse(content);
 
-            if (loadedData.systemPrompt && loadedData.history) {
+            if (loadedData.systemPrompt && loadedData.history && loadedData.autoSaveFilePath) {
                 this.systemPrompt = loadedData.systemPrompt;
                 this.history = loadedData.history;
+                this.autoSaveFileUri = vscode.Uri.file(loadedData.autoSaveFilePath);
                 vscode.window.showInformationMessage(`Session loaded from ${selectedFile}`);
                 return this.history;
             } else {
-                throw new Error("Invalid session file format.");
+                throw new Error("Invalid or old session file format.");
             }
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to load session: ${error.message}`);
