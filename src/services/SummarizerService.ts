@@ -68,16 +68,17 @@ export class SummarizerService {
             const template = await this.loadPromptTemplate();
             const newLogText = this.formatLogToText(newLogChunk);
 
+            // --- ▼▼▼ ここを修正 ▼▼▼ ---
+            // replaceAllの代わりに、正規表現と'g'フラグを使って全局置換を行う
             const prompt = template
-                .replace('{{previous_summary}}', previousSummary || '（まだ要約はありません）')
-                .replace('{{new_log}}', newLogText);
+                .replace(/\{\{previous_summary\}\}/g, previousSummary || '（まだ要約はありません）')
+                .replace(/\{\{new_log\}\}/g, newLogText);
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
             const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
 
-            // 要約はストリーミング不要で、より低コスト・高速なモデルを使っても良い場合がある
             const result = await this.provider.chat({
                 messages: messages,
-                // temperatureは低めにして、事実に基づいた要約を生成させる
                 temperature: 0.2,
             });
 
@@ -92,7 +93,6 @@ export class SummarizerService {
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to generate summary: ${error.message}`);
             console.error(error);
-            // エラーが発生した場合は、とりあえず古い要約を返すことで処理を継続させる
             return previousSummary;
         }
     }
