@@ -45,14 +45,12 @@ class ChatPanel {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
-        // --- ▼▼▼ ここから修正 ▼▼▼ ---
         // パネルが既に存在する場合、再表示して最新の履歴を送信する
         if (ChatPanel.currentPanel) {
             ChatPanel.currentPanel._panel.reveal(column);
             ChatPanel.currentPanel.restoreHistory(); // 履歴を復元するメソッドを呼び出す
             return;
         }
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         const panel = vscode.window.createWebviewPanel(ChatPanel.viewType, 'Interactive Story Chat', column || vscode.ViewColumn.Two, {
             enableScripts: true,
             // --- ▼▼▼ ここから追加 ▼▼▼ ---
@@ -78,7 +76,7 @@ class ChatPanel {
         this._disposables = [];
         this._panel = panel;
         this._extensionUri = extensionUri;
-        this.sessionManager = new SessionManager_1.SessionManager();
+        this.sessionManager = SessionManager_1.SessionManager.getInstance(); // シングルトンインスタンスを取得
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
         this._panel.webview.onDidReceiveMessage(message => this._handleWebviewMessage(message), null, this._disposables);

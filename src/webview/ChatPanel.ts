@@ -15,23 +15,22 @@ export class ChatPanel {
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
+    private sessionManager: SessionManager; // SessionManagerのインスタンスを保持
 
-    private sessionManager: SessionManager;
 
     public static createOrShow(extensionUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+       
         // パネルが既に存在する場合、再表示して最新の履歴を送信する
         if (ChatPanel.currentPanel) {
             ChatPanel.currentPanel._panel.reveal(column);
             ChatPanel.currentPanel.restoreHistory(); // 履歴を復元するメソッドを呼び出す
             return;
         }
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
-
+      
         const panel = vscode.window.createWebviewPanel(
             ChatPanel.viewType,
             'Interactive Story Chat',
@@ -65,7 +64,7 @@ export class ChatPanel {
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
         this._extensionUri = extensionUri;
-        this.sessionManager = new SessionManager();
+         this.sessionManager = SessionManager.getInstance(); // シングルトンインスタンスを取得
 
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         

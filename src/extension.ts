@@ -5,6 +5,7 @@ import { initializeProject } from './commands/initializeProject';
 import { ChatPanel } from './webview/ChatPanel';
 import { ConfigService } from './services/ConfigService';
 import { KeytarService } from './services/KeytarService';
+import { SessionManager } from './services/SessionManager';
 
 /**
  * 拡張機能が有効化されたときに呼び出されるメソッド
@@ -17,6 +18,7 @@ export function activate(context: vscode.ExtensionContext) {
     // サービスを初期化
     const configService = ConfigService.getInstance();
     const keytarService = KeytarService.getInstance();
+    const sessionManager = SessionManager.getInstance(); // 拡張機能起動時にインスタンスを生成
     context.subscriptions.push({ dispose: () => configService.dispose() });
     
     // 1. コマンドの登録

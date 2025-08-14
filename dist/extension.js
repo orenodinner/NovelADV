@@ -41,6 +41,7 @@ const initializeProject_1 = require("./commands/initializeProject");
 const ChatPanel_1 = require("./webview/ChatPanel");
 const ConfigService_1 = require("./services/ConfigService");
 const KeytarService_1 = require("./services/KeytarService");
+const SessionManager_1 = require("./services/SessionManager");
 /**
  * 拡張機能が有効化されたときに呼び出されるメソッド
  * @param context 拡張機能のコンテキスト
@@ -50,6 +51,7 @@ function activate(context) {
     // サービスを初期化
     const configService = ConfigService_1.ConfigService.getInstance();
     const keytarService = KeytarService_1.KeytarService.getInstance();
+    const sessionManager = SessionManager_1.SessionManager.getInstance(); // 拡張機能起動時にインスタンスを生成
     context.subscriptions.push({ dispose: () => configService.dispose() });
     // 1. コマンドの登録
     context.subscriptions.push(vscode.commands.registerCommand('interactive-story.initializeProject', initializeProject_1.initializeProject));

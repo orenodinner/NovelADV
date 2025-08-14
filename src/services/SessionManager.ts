@@ -9,13 +9,23 @@ import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExist
 const MAX_HISTORY_LENGTH = 20; // LLMに渡す直近の対話履歴の最大数
 
 export class SessionManager {
+
+    private static instance: SessionManager;
+
     private systemPrompt: string | null = null;
     private history: ChatMessage[] = [];
     private contextBuilder: StoryContextBuilder;
     private autoSaveFileUri: vscode.Uri | null = null;
 
-    constructor() {
+    private constructor() { // privateに変更
         this.contextBuilder = new StoryContextBuilder();
+    }
+
+    public static getInstance(): SessionManager {
+        if (!SessionManager.instance) {
+            SessionManager.instance = new SessionManager();
+        }
+        return SessionManager.instance;
     }
 
     /**
@@ -24,6 +34,11 @@ export class SessionManager {
      * @returns {Promise<string>} オープニングメッセージ
      */
     public async startNewSession(): Promise<string> {
+        if (this.history.length > 0) {
+             // 最後のメッセージを返すなど、既存のセッションを継続する
+            return this.history[this.history.length - 1].content;
+        }
+
         this.systemPrompt = await this.contextBuilder.buildInitialSystemPrompt();
         this.history = [];
         await this.prepareAutoSaveFile();
