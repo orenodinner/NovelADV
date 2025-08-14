@@ -7,8 +7,9 @@ import { StoryContextBuilder } from './StoryContextBuilder';
 import { SummarizerService } from './SummarizerService';
 import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists } from '../utils/workspaceUtils';
 
-const SHORT_TERM_MEMORY_TURNS = 10;
-const SUMMARIZATION_TRIGGER_TURNS = 15;
+// --- ▼▼▼ ここから修正 ▼▼▼ ---
+// ファイル冒頭の定数を削除
+// --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
 export class SessionManager implements vscode.Disposable {
     private static instance: SessionManager;
@@ -20,16 +21,20 @@ export class SessionManager implements vscode.Disposable {
     private contextBuilder: StoryContextBuilder;
     private summarizer: SummarizerService;
 
-    // 現在のセッション状態をリアルタイムで保持するファイル
     private currentSessionFileUri: vscode.Uri | null = null;
     private isSummarizing: boolean = false;
+
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    // プロジェクト固有の設定を保持するプロパティ
+    private shortTermMemoryTurns: number = 10; // デフォルト値
+    private summarizationTriggerTurns: number = 15; // デフォルト値
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     private constructor() {
         this.contextBuilder = new StoryContextBuilder();
         this.summarizer = SummarizerService.getInstance();
     }
     
-    // シングルトンインスタンスを破棄し、バックアップ処理を呼び出す
     public dispose() {
         this.archiveCurrentSession('session_closed_');
         SessionManager.instance = undefined!;
@@ -43,9 +48,40 @@ export class SessionManager implements vscode.Disposable {
         return SessionManager.instance;
     }
 
+    // --- ▼▼▼ ここから新規メソッド追加 ▼▼▼ ---
     /**
-     * 新しいセッション用のファイルを準備する
+     * プロジェクト設定ファイル(.storygamesetting.json)から設定を読み込む
      */
+    private async loadProjectSettings(): Promise<void> {
+        try {
+            const projectRoot = await getProjectRoot();
+            const settingFileUri = vscode.Uri.joinPath(projectRoot, '.storygamesetting.json');
+            const content = await readFileContent(settingFileUri);
+            const settings = JSON.parse(content);
+
+            if (settings.context && typeof settings.context.shortTermMemoryTurns === 'number') {
+                this.shortTermMemoryTurns = settings.context.shortTermMemoryTurns;
+            } else {
+                this.shortTermMemoryTurns = 10; // デフォルト値
+            }
+
+            if (settings.context && typeof settings.context.summarizationTriggerTurns === 'number') {
+                this.summarizationTriggerTurns = settings.context.summarizationTriggerTurns;
+            } else {
+                this.summarizationTriggerTurns = 15; // デフォルト値
+            }
+            
+            console.log(`Project settings loaded: shortTermMemoryTurns=${this.shortTermMemoryTurns}, summarizationTriggerTurns=${this.summarizationTriggerTurns}`);
+
+        } catch (error) {
+            console.warn("Could not load .storygamesetting.json. Using default context settings.", error);
+            // ファイルが読めない場合はデフォルト値のまま継続
+            this.shortTermMemoryTurns = 10;
+            this.summarizationTriggerTurns = 15;
+        }
+    }
+    // --- ▲▲▲ ここまで新規メソッド追加 ▲▲▲ ---
+
     private async prepareNewSessionFiles(): Promise<void> {
         try {
             const projectRoot = await getProjectRoot();
@@ -56,7 +92,6 @@ export class SessionManager implements vscode.Disposable {
             const fileName = `session_${timestamp}.json`;
             this.currentSessionFileUri = vscode.Uri.joinPath(autoSavesDirUri, fileName);
 
-            // この時点では空のファイルを作成するだけ
             await this.updateCurrentSessionFile();
         } catch (error: any) {
             console.error("Failed to prepare new session file:", error);
@@ -64,10 +99,6 @@ export class SessionManager implements vscode.Disposable {
         }
     }
 
-    /**
-     * 現在のセッションファイルをアーカイブディレクトリにコピー（バックアップ）する
-     * @param prefix アーカイブファイル名のプレフィックス
-     */
     public async archiveCurrentSession(prefix: string = 'archive_'): Promise<void> {
         if (!this.currentSessionFileUri) return;
 
@@ -80,13 +111,11 @@ export class SessionManager implements vscode.Disposable {
             const newFileName = `${prefix}${timestamp}.json`;
             const archiveFileUri = vscode.Uri.joinPath(archivesDirUri, newFileName);
             
-            // fs.copyはファイルが存在しないとエラーになるため、read/writeで実装
             const content = await readFileContent(this.currentSessionFileUri);
             await writeFileContent(archiveFileUri, content);
 
             console.log(`Session archived to ${newFileName}`);
         } catch (error: any) {
-             // ファイルが存在しないなどのエラーは無視する
             if (!(error instanceof vscode.FileSystemError)) {
                 console.error("Failed to archive session:", error);
                 vscode.window.showErrorMessage(`Failed to archive session: ${error.message}`);
@@ -96,18 +125,21 @@ export class SessionManager implements vscode.Disposable {
 
     public async startNewSession(): Promise<string> {
         if (this.history.length > 0) {
-            // 既存のセッションがあれば最後のメッセージを返す
             const lastMessage = this.history[this.history.length - 1];
             return lastMessage ? lastMessage.content : "セッションを再開します。";
         }
 
-        // 新しいセッションを開始する前に、古いセッションがあればアーカイブする
         await this.archiveCurrentSession('session_restarted_');
+
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // セッション開始時にプロジェクト設定を読み込む
+        await this.loadProjectSettings();
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         this.systemPrompt = await this.contextBuilder.buildInitialSystemPrompt();
         this.history = [];
         this.summary = '';
-        await this.prepareNewSessionFiles(); // 新しいセッションファイルを作成
+        await this.prepareNewSessionFiles();
 
         const openingMessage = await this.contextBuilder.getOpeningScene();
         await this.addMessage('assistant', openingMessage);
@@ -126,9 +158,12 @@ export class SessionManager implements vscode.Disposable {
     private async triggerSummarizationIfNeeded(): Promise<void> {
         const currentTurnCount = Math.floor(this.history.length / 2);
         
-        if (this.isSummarizing || currentTurnCount < SUMMARIZATION_TRIGGER_TURNS) {
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // ハードコードされた定数をプロパティに置き換え
+        if (this.isSummarizing || currentTurnCount < this.summarizationTriggerTurns) {
             return;
         }
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         this.isSummarizing = true;
         
@@ -138,7 +173,10 @@ export class SessionManager implements vscode.Disposable {
             cancellable: false
         }, async () => {
             try {
-                const turnsToSummarize = this.history.length - (SHORT_TERM_MEMORY_TURNS * 2);
+                // --- ▼▼▼ ここから修正 ▼▼▼ ---
+                // ハードコードされた定数をプロパティに置き換え
+                const turnsToSummarize = this.history.length - (this.shortTermMemoryTurns * 2);
+                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
                 const logToSummarize = this.history.slice(0, turnsToSummarize);
                 const remainingHistory = this.history.slice(turnsToSummarize);
 
@@ -157,9 +195,6 @@ export class SessionManager implements vscode.Disposable {
         });
     }
     
-    /**
-     * 現在のセッション状態をファイルに上書き保存する
-     */
     private async updateCurrentSessionFile(): Promise<void> {
         if (!this.currentSessionFileUri) {
              if (this.history.length > 0) await this.prepareNewSessionFiles();
@@ -199,14 +234,14 @@ ${this.summary || "物語は始まったばかりです。"}
 ここからが現在の会話です。プレイヤーの最後の発言に応答してください。
 `.trim();
 
-        const recentHistory = this.history.slice(-(SHORT_TERM_MEMORY_TURNS * 2));
+        // --- ▼▼▼ ここから修正 ▼▼▼ ---
+        // ハードコードされた定数をプロパティに置き換え
+        const recentHistory = this.history.slice(-(this.shortTermMemoryTurns * 2));
+        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         
         return [{ role: 'system', content: fullSystemPrompt }, ...recentHistory];
     }
     
-    /**
-     * 手動セーブ（現在のセッションをアーカイブとして保存）
-     */
     public async saveSession(): Promise<void> {
         if (this.history.length === 0 && this.summary === '') {
             vscode.window.showInformationMessage("No conversation to save.");
@@ -216,12 +251,8 @@ ${this.summary || "物語は始まったばかりです。"}
         vscode.window.showInformationMessage(`Current session saved to 'logs/archives'.`);
     }
 
-    /**
-     * アーカイブされたセッションファイルを読み込む
-     */
     public async loadSession(): Promise<ChatMessage[] | null> {
         const projectRoot = await getProjectRoot();
-        // ロード対象を archives ディレクトリに変更
         const archivesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'archives');
 
         try {
@@ -243,7 +274,6 @@ ${this.summary || "物語は始まったばかりです。"}
 
             if (!selectedFile) return null;
             
-            // 古いセッションをロードする前に、現在のセッションをアーカイブする
             await this.archiveCurrentSession('session_before_load_');
 
             const fileUri = vscode.Uri.joinPath(archivesDirUri, selectedFile);
@@ -251,11 +281,15 @@ ${this.summary || "物語は始まったばかりです。"}
             const loadedData: SessionData = JSON.parse(content);
 
             if (loadedData.systemPrompt && loadedData.history) {
+                // --- ▼▼▼ ここから修正 ▼▼▼ ---
+                // ロード時にもプロジェクト設定を再読み込みする
+                await this.loadProjectSettings();
+                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
+                
                 this.systemPrompt = loadedData.systemPrompt;
                 this.history = loadedData.history;
                 this.summary = loadedData.summary || '';
 
-                // ロードしたセッションを新しい「現在のセッション」として引き継ぐ
                 await this.prepareNewSessionFiles();
                 await this.updateCurrentSessionFile();
                 

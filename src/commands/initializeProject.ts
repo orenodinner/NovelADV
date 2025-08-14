@@ -5,16 +5,18 @@ import * as path from 'path';
 
 // --- ファイルテンプレート ---
 
+// --- ▼▼▼ ここから修正 ▼▼▼ ---
 const STORYGAMESETTING_JSON_CONTENT = `{
   "$schema": "https://example.com/storygamesetting.schema.json",
   "llmProvider": "openrouter",
   "llmModel": "anthropic/claude-3.5-sonnet",
-  "sessionLogs": {
-    "enabled": true,
-    "directory": "logs"
+  "context": {
+    "shortTermMemoryTurns": 10,
+    "summarizationTriggerTurns": 15
   }
 }
 `;
+// --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
 const WORLD_SETTING_MD_CONTENT = `# 舞台設定
 # このファイルに、物語の基本的な世界観や背景を記述します。
@@ -38,13 +40,13 @@ const AI_RULES_MD_CONTENT = `# AIへの指示
 # AIがNPCを演じる上での基本的なルールを記述します。
 # ここに書かれた指示をAIは最優先で守ろうとします。
 
-あなたは今から、シナリオに登場するキャラクターの一人として振る舞ってください。ゲームマスターの視点やナレーションは一切行わずキャラクターのセリフ以外は、心理描写や場面描写は、必ず主人公(プレイヤー)の視点で第三者的に行ってください。あなたは純粋に主人公(プレイヤー)に話しかける登場人物としてのみ行動してください。
+あなたは今から、シナリオに登場するキャラクターの一人として振る舞ってください。ゲームマスターの視点やナレーション、第三者的な説明は一切行わず、あなたは純粋にプレイヤーに話しかける登場人物としてのみ行動してください。
 
 ## 振る舞いのルール
 - 部下としての自然なやり取りを意識してください。
 - プレイヤーの反応や行動を受けて、自然な流れで次の会話やイベントを提案してください。
 - プレイヤーがどんな行動を提案しても、NPCとして驚いたり喜んだり、疑問を投げかけたりして応答してください。
-- 心理描写や場面描写は、必ず主人公(プレイヤー)の視点で行ってください。
+- 心理描写や場面描写は、必ずプレイヤー（ジン）の視点で行ってください。
 
 ## 注意点
 - 主人公であるプレイヤーは魅力に溢れています。
@@ -56,7 +58,7 @@ const OPENING_SCENE_MD_CONTENT = `# ゲーム開始時の状況
 # プレイヤーがゲームを開始したときに、最初に表示されるメッセージです。
 # ここから物語が始まります。
 
-配属初日、「警視庁特別女子捜査局」の扉を開けると、一人の女性が待っていた。彼女は秘書官クリス・アンダーだ。
+配属初日、僕が「警視庁特別女子捜査局」の扉を開けると、一人の女性が待っていた。彼女が、僕の秘書官だというクリス・アンダーだ。
 
 「ジン局長、お待ちしておりました。私があなたの秘書を務めます、クリス・アンダーです。これから、お手続きと寮のご案内をさせていただきますね」
 `;
@@ -158,19 +160,16 @@ export async function initializeProject() {
         try {
             progress.report({ message: 'Creating directories...', increment: 10 });
             
-            // --- ▼▼▼ ここから修正 ▼▼▼ ---
-            // logs/archives ディレクトリも追加
             const dirs = [
                 'scenario', 
                 'scenario/characters', 
                 'scenario/prompts',
                 'logs', 
                 'logs/autosaves',
-                'logs/archives', // バックアップ用
+                'logs/archives',
                 'exports',
                 'summaries'
             ];
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             for (const dir of dirs) {
                 await fs.createDirectory(vscode.Uri.joinPath(projectRoot, dir));
             }
