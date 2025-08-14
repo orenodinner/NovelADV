@@ -2,6 +2,7 @@
 
 import * as vscode from 'vscode';
 import { initializeProject } from './commands/initializeProject';
+import { exportLogToMarkdown } from './commands/exportLogToMarkdown'; // 新規インポート
 import { ChatPanel } from './webview/ChatPanel';
 import { ConfigService } from './services/ConfigService';
 import { KeytarService } from './services/KeytarService';
@@ -18,10 +19,10 @@ export function activate(context: vscode.ExtensionContext) {
     // サービスを初期化
     const configService = ConfigService.getInstance();
     const keytarService = KeytarService.getInstance();
-    const sessionManager = SessionManager.getInstance(); // 拡張機能起動時にインスタンスを生成
+    const sessionManager = SessionManager.getInstance();
     context.subscriptions.push({ dispose: () => configService.dispose() });
     
-    // 1. コマンドの登録
+    // コマンドの登録
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.initializeProject', initializeProject)
     );
@@ -31,6 +32,12 @@ export function activate(context: vscode.ExtensionContext) {
             ChatPanel.createOrShow(context.extensionUri);
         })
     );
+
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    context.subscriptions.push(
+        vscode.commands.registerCommand('interactive-story.exportLogToMarkdown', exportLogToMarkdown)
+    );
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 }
 
 /**

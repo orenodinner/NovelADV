@@ -77,6 +77,24 @@ const NARUSE_MAI_MD_CONTENT = `# キャラクター設定: 成瀬 真衣
 - 役職：捜査官
 `;
 
+// --- .gitignoreテンプレート ---
+const GITIGNORE_CONTENT = `
+# VS Code
+.vscode/
+
+# Logs and Exports
+logs/
+exports/
+
+# Node
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+`;
+
+
 // --- 初期化処理 ---
 
 export async function initializeProject() {
@@ -114,15 +132,21 @@ export async function initializeProject() {
         try {
             progress.report({ message: 'Creating directories...', increment: 10 });
             
-            const dirs = ['scenario', 'scenario/characters', 'logs'];
+            // --- ▼▼▼ ここから修正 ▼▼▼ ---
+            // logs/autosaves と exports ディレクトリも作成
+            const dirs = ['scenario', 'scenario/characters', 'logs', 'logs/autosaves', 'exports'];
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             for (const dir of dirs) {
                 await fs.createDirectory(vscode.Uri.joinPath(projectRoot, dir));
             }
 
             progress.report({ message: 'Creating scenario files...', increment: 40 });
 
+            // --- ▼▼▼ ここから修正 ▼▼▼ ---
+            // .gitignore ファイルも追加
             const filesToCreate: { filePath: string; content: string }[] = [
                 { filePath: '.storygamesetting.json', content: STORYGAMESETTING_JSON_CONTENT },
+                { filePath: '.gitignore', content: GITIGNORE_CONTENT },
                 { filePath: path.join('scenario', '00_world_setting.md'), content: WORLD_SETTING_MD_CONTENT },
                 { filePath: path.join('scenario', '01_player_character.md'), content: PLAYER_CHARACTER_MD_CONTENT },
                 { filePath: path.join('scenario', '02_ai_rules.md'), content: AI_RULES_MD_CONTENT },
@@ -130,11 +154,12 @@ export async function initializeProject() {
                 { filePath: path.join('scenario', 'characters', 'chris_under.md'), content: CHRIS_UNDER_MD_CONTENT },
                 { filePath: path.join('scenario', 'characters', 'naruse_mai.md'), content: NARUSE_MAI_MD_CONTENT },
             ];
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             
             const encoder = new TextEncoder();
             for (const file of filesToCreate) {
                 const uri = vscode.Uri.joinPath(projectRoot, file.filePath);
-                await fs.writeFile(uri, encoder.encode(file.content));
+                await fs.writeFile(uri, encoder.encode(file.content.trim()));
             }
             
             progress.report({ message: 'Finishing up...', increment: 50 });

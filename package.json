@@ -14,6 +14,7 @@
   "activationEvents": [
     "onCommand:interactive-story.initializeProject",
     "onCommand:interactive-story.openChat",
+    "onCommand:interactive-story.exportLogToMarkdown",
     "onWebviewPanel:interactive-story.chatView"
   ],
   "contributes": {
@@ -27,6 +28,11 @@
         "command": "interactive-story.openChat",
         "title": "Story Game: Open Chat / Start Game",
         "category": "Interactive Story"
+      },
+      {
+        "command": "interactive-story.exportLogToMarkdown",
+        "title": "Story Game: Export Log to Markdown",
+        "category": "Interactive Story"
       }
     ],
     "keybindings": [
@@ -38,7 +44,7 @@
     ],
     "configurationDefaults": {
       "files.associations": {
-        ".novelrc.json": "jsonc"
+        ".storygamesetting.json": "jsonc"
       }
     },
     "configuration": {

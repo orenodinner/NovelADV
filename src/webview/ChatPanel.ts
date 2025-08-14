@@ -37,10 +37,8 @@ export class ChatPanel {
             column || vscode.ViewColumn.Two,
             {
                 enableScripts: true,
-                // --- ▼▼▼ ここから追加 ▼▼▼ ---
                 // 非表示になってもWebviewの状態を維持する
                 retainContextWhenHidden: true,
-                // --- ▲▲▲ ここまで追加 ▲▲▲ ---
                 localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
             }
         );
@@ -48,17 +46,15 @@ export class ChatPanel {
         ChatPanel.currentPanel = new ChatPanel(panel, extensionUri);
     }
     
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     /**
      * Webviewに現在の対話履歴を送信してUIを復元させる
      */
     private restoreHistory() {
-        const history = this.sessionManager.getHistory(); // SessionManagerに現在の履歴を取得するメソッドを追加する必要がある
+        const history = this.sessionManager.getHistory();
         if (history && history.length > 0) {
             this._panel.webview.postMessage({ command: 'load-history', history: history });
         }
     }
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
@@ -91,14 +87,12 @@ export class ChatPanel {
     private async _handleWebviewMessage(message: any) {
         switch (message.command) {
             case 'webview-ready':
-                // --- ▼▼▼ ここから修正 ▼▼▼ ---
                 // 履歴が空の場合のみ新規ゲーム開始、そうでなければ履歴を復元
                 if (this.sessionManager.getHistory().length === 0) {
                     await this.startGame();
                 } else {
                     this.restoreHistory();
                 }
-                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
                 return;
             case 'user-message':
                 await this.handleUserMessage(message.text);

@@ -1,23 +1,22 @@
 // src/services/SessionManager.ts
 
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { ChatMessage } from '../types';
+import { ChatMessage, SessionData } from '../types';
 import { StoryContextBuilder } from './StoryContextBuilder';
-import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists, appendFileContent } from '../utils/workspaceUtils';
+import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists } from '../utils/workspaceUtils';
 
 const MAX_HISTORY_LENGTH = 20; // LLMに渡す直近の対話履歴の最大数
 
 export class SessionManager {
-
     private static instance: SessionManager;
 
     private systemPrompt: string | null = null;
     private history: ChatMessage[] = [];
     private contextBuilder: StoryContextBuilder;
-    private autoSaveFileUri: vscode.Uri | null = null;
+    // 自動保存JSONファイルのURI
+    private autoSaveJsonUri: vscode.Uri | null = null;
 
-    private constructor() { // privateに変更
+    private constructor() {
         this.contextBuilder = new StoryContextBuilder();
     }
 
@@ -35,14 +34,17 @@ export class SessionManager {
      */
     public async startNewSession(): Promise<string> {
         if (this.history.length > 0) {
-             // 最後のメッセージを返すなど、既存のセッションを継続する
-            return this.history[this.history.length - 1].content;
+            // 既存のセッションがあれば最後のメッセージを返す
+            const lastMessage = this.history[this.history.length - 1];
+            return lastMessage ? lastMessage.content : "セッションを再開します。";
         }
 
         this.systemPrompt = await this.contextBuilder.buildInitialSystemPrompt();
         this.history = [];
-        await this.prepareAutoSaveFile();
+        await this.prepareAutoSave();
+
         const openingMessage = await this.contextBuilder.getOpeningScene();
+        // 履歴に追加し、自動保存を実行
         await this.addMessage('assistant', openingMessage);
         return openingMessage;
     }
@@ -54,60 +56,58 @@ export class SessionManager {
      */
     public async addMessage(role: 'user' | 'assistant', content: string): Promise<void> {
         this.history.push({ role, content });
-        await this.autoSaveMessage(role, content);
+        // メッセージが追加されるたびにセッション全体をJSONに自動保存
+        await this.autoSaveSession();
     }
 
     /**
-     * 自動保存用のMarkdownファイルを準備する
+     * 自動保存用のJSONファイルを準備する
      */
-    private async prepareAutoSaveFile(): Promise<void> {
+    private async prepareAutoSave(): Promise<void> {
         try {
             const projectRoot = await getProjectRoot();
-            const storiesDirUri = vscode.Uri.joinPath(projectRoot, 'stories');
-            await ensureDirectoryExists(storiesDirUri);
-    
+            // 自動保存用のディレクトリを分ける
+            const autoSavesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'autosaves');
+            await ensureDirectoryExists(autoSavesDirUri);
+
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const fileName = `story_${timestamp}.md`;
-            this.autoSaveFileUri = vscode.Uri.joinPath(storiesDirUri, fileName);
-    
-            const playerInfo = (await this.contextBuilder.buildInitialSystemPrompt())
-                .split('## 主人公（プレイヤー）の情報')[1]
-                .split('---')[0]
-                .trim();
-            
-            const title = `# Story Log: ${new Date().toLocaleString()}\n\n`;
-            const header = `## 主人公\n${playerInfo}\n\n---\n\n`;
-            
-            await writeFileContent(this.autoSaveFileUri, title + header);
-            
+            const fileName = `autosave_session_${timestamp}.json`;
+            this.autoSaveJsonUri = vscode.Uri.joinPath(autoSavesDirUri, fileName);
+
+            // 空のセッションデータで初期化し、ファイルを生成
+            await this.autoSaveSession();
+
         } catch (error: any) {
             console.error("Failed to prepare auto-save file:", error);
             vscode.window.showErrorMessage(`Failed to prepare auto-save file: ${error.message}`);
-            this.autoSaveFileUri = null;
+            this.autoSaveJsonUri = null;
         }
     }
 
     /**
-     * メッセージをMarkdown形式でファイルに追記する
-     * @param role 
-     * @param content 
+     * 現在のセッション状態をJSONファイルに上書き保存する
      */
-    private async autoSaveMessage(role: 'user' | 'assistant', content: string): Promise<void> {
-        if (!this.autoSaveFileUri) return;
+    private async autoSaveSession(): Promise<void> {
+        if (!this.autoSaveJsonUri) {
+            // まだ自動保存ファイルが準備されていなければ準備する
+            if (this.history.length > 0) {
+                await this.prepareAutoSave();
+            }
+            return;
+        };
 
         try {
-            const formattedMessage = role === 'user' 
-                ? `**You:**\n${content}\n\n` 
-                : `${content}\n\n---\n\n`;
-            
-            await appendFileContent(this.autoSaveFileUri, formattedMessage);
-
+            const sessionData: SessionData = {
+                systemPrompt: this.systemPrompt,
+                history: this.history,
+            };
+            await writeFileContent(this.autoSaveJsonUri, JSON.stringify(sessionData, null, 2));
         } catch (error: any) {
-            console.error("Failed to auto-save message:", error);
+            console.error("Failed to auto-save session:", error);
+            // 頻繁に発生する可能性があるため、ここではウィンドウメッセージは表示しない
         }
     }
 
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     /**
      * 現在の対話履歴（セッション）を取得する
      * @returns {ChatMessage[]}
@@ -115,7 +115,6 @@ export class SessionManager {
     public getHistory(): ChatMessage[] {
         return this.history;
     }
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     /**
      * LLMに渡すためのメッセージ配列を取得する
@@ -131,8 +130,7 @@ export class SessionManager {
     }
 
     /**
-     * 現在の対話履歴をファイルに保存する
-     * @returns {Promise<void>}
+     * 現在の対話履歴を手動でファイルに保存する
      */
     public async saveSession(): Promise<void> {
         if (this.history.length === 0) {
@@ -145,13 +143,14 @@ export class SessionManager {
         await ensureDirectoryExists(logsDirUri);
 
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const fileName = `session_${timestamp}.json`;
+        const fileName = `manual_save_${timestamp}.json`;
         const fileUri = vscode.Uri.joinPath(logsDirUri, fileName);
 
-        const dataToSave = {
+        const dataToSave: SessionData = {
             systemPrompt: this.systemPrompt,
             history: this.history,
-            autoSaveFilePath: this.autoSaveFileUri?.fsPath
+            // 自動保存ファイルのパスも一緒に保存しておく
+            autoSaveJsonPath: this.autoSaveJsonUri?.fsPath
         };
 
         try {
@@ -163,7 +162,7 @@ export class SessionManager {
     }
 
     /**
-     * 保存されたセッションファイルを読み込む
+     * 保存されたセッションファイルを読み込む (手動ロード)
      * @returns {Promise<ChatMessage[] | null>} ロードされた対話履歴、失敗した場合はnull
      */
     public async loadSession(): Promise<ChatMessage[] | null> {
@@ -174,13 +173,13 @@ export class SessionManager {
             await ensureDirectoryExists(logsDirUri);
             const allFiles = await vscode.workspace.fs.readDirectory(logsDirUri);
             const sessionFiles = allFiles
-                .filter(([name, type]) => type === vscode.FileType.File && name.startsWith('session_') && name.endsWith('.json'))
+                .filter(([name, type]) => type === vscode.FileType.File && name.startsWith('manual_save_') && name.endsWith('.json'))
                 .map(([name, _]) => name)
                 .sort()
-                .reverse(); 
+                .reverse();
 
             if (sessionFiles.length === 0) {
-                vscode.window.showInformationMessage("No saved sessions found.");
+                vscode.window.showInformationMessage("No saved manual sessions found.");
                 return null;
             }
 
@@ -192,12 +191,23 @@ export class SessionManager {
 
             const fileUri = vscode.Uri.joinPath(logsDirUri, selectedFile);
             const content = await readFileContent(fileUri);
-            const loadedData = JSON.parse(content);
+            const loadedData: SessionData = JSON.parse(content);
 
-            if (loadedData.systemPrompt && loadedData.history && loadedData.autoSaveFilePath) {
+            // SessionDataの形式をチェック
+            if (loadedData.systemPrompt && loadedData.history) {
                 this.systemPrompt = loadedData.systemPrompt;
                 this.history = loadedData.history;
-                this.autoSaveFileUri = vscode.Uri.file(loadedData.autoSaveFilePath);
+                
+                // ロードしたセッションを新しい自動保存ファイルとして引き継ぐ
+                if(loadedData.autoSaveJsonPath) {
+                    this.autoSaveJsonUri = vscode.Uri.file(loadedData.autoSaveJsonPath);
+                } else {
+                    // 古い形式からのロードの場合、新しい自動保存ファイルを作成
+                    await this.prepareAutoSave();
+                }
+                
+                await this.autoSaveSession(); // 状態を同期
+                
                 vscode.window.showInformationMessage(`Session loaded from ${selectedFile}`);
                 return this.history;
             } else {
