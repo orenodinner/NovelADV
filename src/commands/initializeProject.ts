@@ -5,139 +5,76 @@ import * as path from 'path';
 
 // --- ファイルテンプレート ---
 
-const NOVELRC_JSON_CONTENT = `{
-  "$schema": "https://example.com/novelrc.schema.json",
-  "provider": "openrouter",
-  "model": "anthropic/claude-3.5-sonnet",
-  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
-  "apiKeyStore": "keychain",
-  "maxTokens": 3000,
-  "temperature": 0.7,
-  "language": "ja-JP",
-  "providerOptions": {
-    "openrouter": {
-      "httpReferer": "",
-      "xTitle": "Novel Assistant for VS Code",
-      "extraHeaders": {}
-    }
-  },
-  "output": {
-    "chapterLengthChars": [3000, 7000],
-    "summarySentences": 5
-  },
-  "paths": {
-    "bible": "bible",
-    "outline": "outline",
-    "chapters": "chapters",
-    "summaries": "summaries",
-    "reports": "reports",
-    "prompts": "prompts"
-  },
-  "consistency": {
-    "checks": ["voice", "world_rules", "timeline", "names_terms"],
-    "strictness": "medium"
-  },
-  "rateLimit": { "rpm": 30, "burst": 5 },
-  "telemetry": { "enabled": false }
+const STORYGAMESETTING_JSON_CONTENT = `{
+  "$schema": "https://example.com/storygamesetting.schema.json",
+  "llmProvider": "openrouter",
+  "llmModel": "anthropic/claude-3.5-sonnet",
+  "sessionLogs": {
+    "enabled": true,
+    "directory": "logs"
+  }
 }
 `;
 
-const CHARACTERS_MD_CONTENT = `# 登場人物
+const WORLD_SETTING_MD_CONTENT = `# 舞台設定
+# このファイルに、物語の基本的な世界観や背景を記述します。
+# AIはこの情報を元に世界を理解します。
 
-## 久遠 茜 (くどう あかね)
-- **口調**: 簡潔・冷静。感情の起伏は少ないが、核心を突く発言が多い。
-- **役割**: 主人公のパートナー。探偵役。
-- **関係**: 朝霧透とは旧知の仲。
-
-## 朝霧 透 (あさぎり とおる)
-- **口調**: 軽口を叩くことが多いが、観察眼は鋭い。
-- **役割**: 主人公。物語の語り手。
-- **関係**: 久遠茜に振り回されがち。
+- 場所：「警視庁特別女子捜査局」およびその女子寮
+- 時代：現代の日本
+- 背景：この捜査局は、実は主人公（プレイヤー）を守り、支えるために存在する「大奥」のような組織である。捜査官は全員、主人公に強い敬意を抱いているが、その事実は主人公には秘密にされている。
 `;
 
-const FORESHADOWS_TSV_CONTENT = `id\ttype\tstatus\tintroduced_in\tresolved_in\tdescription\tnotes`;
+const PLAYER_CHARACTER_MD_CONTENT = `# 主人公（プレイヤー）設定
+# プレイヤーが演じるキャラクターの情報を記述します。
 
-const GENERATION_PROMPT_CONTENT = `あなたはプロの小説家です。以下の制約と設定に基づき、物語の続きを生成してください。
-
-【固定スタイル】
-- 三人称／地の文厚め／会話は簡潔
-- 禁止：設定矛盾、過剰な新規固有名詞、無断の一人称変更
-- 口調サンプル：久遠茜=簡潔・冷静／朝霧透=軽口で観察眼
-
-【必要設定（抜粋）】
-<登場人物>
-{{characters}}
-</登場人物>
-
-<世界観ルール>
-{{world}}
-</世界観ルール>
-
-【これまでの要約（直近2章）】
-{{summaries}}
-
-【今回の章の目的・見せ場】
-{{arc_map}}
-
-【出力】
-1) 章本文（3500-6000字）
-2) 章の要約（5文）
-3) 新規に張った伏線（ID候補・説明）
-4) 消化した伏線（ID・根拠となる本文引用）
-5) 整合性セルフチェック（懸念点/対処）
+- 名前：ジン
+- 一人称：僕
+- 役職：局長
+- 立場：警視庁特別女子捜査局に配属された唯一の男性。特例で女子寮での生活を許可されている。自分自身が特別な権力を持つことにはまだ気づいていない。
 `;
 
-// 他のプロンプトやファイルのテンプレートも同様に定義
-const SUMMARIZATION_PROMPT_CONTENT = `# 指示
-以下の小説本文から、重要な要素を抽出してください。
+const AI_RULES_MD_CONTENT = `# AIへの指示
+# AIがNPCを演じる上での基本的なルールを記述します。
+# ここに書かれた指示をAIは最優先で守ろうとします。
 
-# 出力形式
-- 5文程度の要約
-- 登場した固有名詞リスト（人、組織、地名、専門用語）
-- この章の目的（1行で）
+あなたは今から、シナリオに登場するキャラクターの一人として振る舞ってください。ゲームマスターの視点やナレーション、第三者的な説明は一切行わず、あなたは純粋にプレイヤーに話しかける登場人物としてのみ行動してください。
 
-# 本文
-{{chapter_content}}
+## 振る舞いのルール
+- 部下としての自然なやり取りを意識してください。
+- プレイヤーの反応や行動を受けて、自然な流れで次の会話やイベントを提案してください。
+- プレイヤーがどんな行動を提案しても、NPCとして驚いたり喜んだり、疑問を投げかけたりして応答してください。
+- 心理描写や場面描写は、必ずプレイヤー（ジン）の視点で行ってください。
+
+## 注意点
+- 主人公であるプレイヤーは魅力に溢れています。
+- 登場人物は全員美少女です。
+- 会話は常に日本語で行い、選択肢形式ではなく対話形式で進めてください。
 `;
 
-const FORESHADOW_UPDATE_PROMPT_CONTENT = `# 指示
-以下の「現在の伏線リスト(TSV)」と「新しい章の本文」を読み、伏線リストを更新するための差分情報をTSV形式で出力してください。
+const OPENING_SCENE_MD_CONTENT = `# ゲーム開始時の状況
+# プレイヤーがゲームを開始したときに、最初に表示されるメッセージです。
+# ここから物語が始まります。
 
-# 判断基準
-- 新規伏線: 本文中で新たに提示された謎や未解決の事柄。
-- 回収済み伏線: 既存の伏線が本文中で解決または大きく進展した場合。statusを 'resolved' に変更し、resolved_in に現在の章IDを記入。
-- 変化なし: そのままにする。
+配属初日、僕が「警視庁特別女子捜査局」の扉を開けると、一人の女性が待っていた。彼女が、僕の秘書官だというクリス・アンダーだ。
 
-# 現在の伏線リスト(TSV)
-{{foreshadows_tsv}}
-
-# 新しい章の本文
-{{chapter_content}}
-
-# 出力 (差分のみTSV形式)
+「ジン局長、お待ちしておりました。私があなたの秘書を務めます、クリス・アンダーです。これから、お手続きと寮のご案内をさせていただきますね」
 `;
 
-const CONSISTENCY_CHECK_PROMPT_CONTENT = `# 指示
-あなたは編集者です。以下の小説本文と設定資料を読み、設定の矛盾点や改善点を指摘してください。
+const CHRIS_UNDER_MD_CONTENT = `# キャラクター設定: クリス・アンダー
+- 名前: クリス  アンダー
+- 一人称：私
+- 胸の大きさ: Eカップ
+- 性格: 落ち着いた口調。主人公に惚れているがあまり表に出さない。冷静に仕事をこなす。
+- 役職：私(プレイヤー)の秘書
+`;
 
-# チェック項目
-- 口調の逸脱: キャラクターの口調が設定から外れていないか。
-- 世界観の矛盾: 魔法や技術のルールが守られているか。
-- 時系列の矛盾: タイムラインと出来事の順序が合っているか。
-- 用語の揺れ: 固有名詞や専門用語の表記が統一されているか。
-
-# 出力形式
-矛盾点や懸念事項を、以下の形式でリストアップしてください。
-- **重大度**: high / medium / low
-- **箇所**: 矛盾がある本文の引用
-- **問題点**: なぜ問題なのかの説明
-- **修正提案**: どのように修正すべきかの提案
-
-# 設定資料
-{{bible_content}}
-
-# 小説本文
-{{chapter_content}}
+const NARUSE_MAI_MD_CONTENT = `# キャラクター設定: 成瀬 真衣
+- 名前: 成瀬 真衣
+- 一人称：あたし
+- 胸の大きさ: Eカップ
+- 性格: ギャルだが騒がしくはなく落ち着いている。仕事熱心
+- 役職：捜査官
 `;
 
 // --- 初期化処理 ---
@@ -147,7 +84,7 @@ export async function initializeProject() {
         canSelectFolders: true,
         canSelectFiles: false,
         canSelectMany: false,
-        openLabel: 'Select Project Parent Folder'
+        openLabel: 'Select Parent Folder for New Scenario'
     });
 
     if (!folderUri || folderUri.length === 0) {
@@ -157,8 +94,8 @@ export async function initializeProject() {
 
     const parentFolder = folderUri[0];
     const projectName = await vscode.window.showInputBox({
-        prompt: 'Enter your story project name',
-        value: 'MyStory'
+        prompt: 'Enter your new scenario project name',
+        value: 'MyStoryGame'
     });
 
     if (!projectName) {
@@ -171,31 +108,27 @@ export async function initializeProject() {
 
     await vscode.window.withProgress({
         location: vscode.ProgressLocation.Notification,
-        title: `Initializing story project: ${projectName}`,
+        title: `Initializing story game project: ${projectName}`,
         cancellable: false
     }, async (progress) => {
         try {
             progress.report({ message: 'Creating directories...', increment: 10 });
             
-            const dirs = ['bible', 'outline', 'chapters', 'summaries', 'reports', 'prompts', 'logs'];
+            const dirs = ['scenario', 'scenario/characters', 'logs'];
             for (const dir of dirs) {
                 await fs.createDirectory(vscode.Uri.joinPath(projectRoot, dir));
             }
 
-            progress.report({ message: 'Creating files...', increment: 40 });
+            progress.report({ message: 'Creating scenario files...', increment: 40 });
 
             const filesToCreate: { filePath: string; content: string }[] = [
-                { filePath: '.novelrc.json', content: NOVELRC_JSON_CONTENT },
-                { filePath: path.join('bible', 'characters.md'), content: CHARACTERS_MD_CONTENT },
-                { filePath: path.join('bible', 'world.md'), content: '# 世界観\n\n- この世界の魔法は...' },
-                { filePath: path.join('bible', 'rules.md'), content: '# 文体・作風ルール\n\n- ...' },
-                { filePath: path.join('bible', 'foreshadows.tsv'), content: FORESHADOWS_TSV_CONTENT },
-                { filePath: path.join('outline', 'timeline.md'), content: '# 時系列\n\n- 4/10: ...' },
-                { filePath: path.join('outline', 'arc_map.md'), content: '# 章のプロット\n\n- 第1章: ...' },
-                { filePath: path.join('prompts', 'generation.md'), content: GENERATION_PROMPT_CONTENT },
-                { filePath: path.join('prompts', 'summarization.md'), content: SUMMARIZATION_PROMPT_CONTENT },
-                { filePath: path.join('prompts', 'foreshadow_update.md'), content: FORESHADOW_UPDATE_PROMPT_CONTENT },
-                { filePath: path.join('prompts', 'consistency_check.md'), content: CONSISTENCY_CHECK_PROMPT_CONTENT },
+                { filePath: '.storygamesetting.json', content: STORYGAMESETTING_JSON_CONTENT },
+                { filePath: path.join('scenario', '00_world_setting.md'), content: WORLD_SETTING_MD_CONTENT },
+                { filePath: path.join('scenario', '01_player_character.md'), content: PLAYER_CHARACTER_MD_CONTENT },
+                { filePath: path.join('scenario', '02_ai_rules.md'), content: AI_RULES_MD_CONTENT },
+                { filePath: path.join('scenario', '03_opening_scene.md'), content: OPENING_SCENE_MD_CONTENT },
+                { filePath: path.join('scenario', 'characters', 'chris_under.md'), content: CHRIS_UNDER_MD_CONTENT },
+                { filePath: path.join('scenario', 'characters', 'naruse_mai.md'), content: NARUSE_MAI_MD_CONTENT },
             ];
             
             const encoder = new TextEncoder();

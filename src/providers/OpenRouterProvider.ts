@@ -2,13 +2,12 @@
 
 import axios, { AxiosError } from 'axios';
 import { Readable } from 'stream';
-import { ChatProvider, ChatCompletionOptions, ChatCompletionResult, ChatMessage } from '../types';
+import { ChatProvider, ChatCompletionOptions, ChatCompletionResult } from '../types';
 import { ConfigService } from '../services/ConfigService';
 import { KeytarService } from '../services/KeytarService';
 
 export class OpenRouterProvider implements ChatProvider {
     readonly name = 'openrouter';
-    readonly supportsJSON = false; // OpenRouterはモデルによるので、拡張機能側でパースする前提でfalseに
 
     private configService: ConfigService;
     private keytarService: KeytarService;

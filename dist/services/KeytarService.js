@@ -39,7 +39,7 @@ const vscode = __importStar(require("vscode"));
 // keytarはCommonJSモジュールなので、import文のスタイルを合わせる
 const keytar = require("keytar");
 // keytarで使用するサービス名。拡張機能で一意にする。
-const SERVICE_NAME = 'vscode-novel-assistant';
+const SERVICE_NAME = 'vscode-interactive-story-game';
 class KeytarService {
     constructor() {
         // コンストラクタは空でもOK。シングルトンを強制するためにprivateにする。

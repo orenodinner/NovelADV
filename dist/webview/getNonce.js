@@ -1,7 +1,7 @@
 "use strict";
+// src/webview/getNonce.ts
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getNonce = getNonce;
-// src/webview/getNonce.ts
 function getNonce() {
     let text = '';
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';

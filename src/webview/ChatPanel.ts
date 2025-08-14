@@ -5,16 +5,18 @@ import { OpenRouterProvider } from '../providers/OpenRouterProvider';
 import { KeytarService } from '../services/KeytarService';
 import { getNonce } from './getNonce';
 import { ChatMessage } from '../types';
-import { ContextExtractor } from '../services/ContextExtractor';
+import { SessionManager } from '../services/SessionManager';
 
 export class ChatPanel {
     public static currentPanel: ChatPanel | undefined;
 
-    public static readonly viewType = 'novel-assistant.chatView';
+    public static readonly viewType = 'interactive-story.chatView';
 
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
+
+    private sessionManager: SessionManager;
 
     public static createOrShow(extensionUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
@@ -28,7 +30,7 @@ export class ChatPanel {
 
         const panel = vscode.window.createWebviewPanel(
             ChatPanel.viewType,
-            'Novel Assistant Chat',
+            'Interactive Story Chat',
             column || vscode.ViewColumn.Two,
             {
                 enableScripts: true,
@@ -42,11 +44,14 @@ export class ChatPanel {
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
         this._extensionUri = extensionUri;
+        this.sessionManager = new SessionManager();
 
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
+        
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+        
         this._panel.webview.onDidReceiveMessage(
-            message => this._handleDidReceiveMessage(message),
+            message => this._handleWebviewMessage(message),
             null,
             this._disposables
         );
@@ -63,42 +68,49 @@ export class ChatPanel {
         }
     }
 
-    private async _handleDidReceiveMessage(message: any) {
+    private async _handleWebviewMessage(message: any) {
         switch (message.command) {
+            case 'webview-ready':
+                // Webviewの準備ができたらゲームを開始する
+                await this.startGame();
+                return;
             case 'user-message':
-                this.handleUserMessage(message.text);
+                await this.handleUserMessage(message.text);
                 return;
-            // 'request-api-key-setup' は直接は使われないが、将来のために残す
-            case 'request-api-key-setup':
-                this.setupApiKey();
+            case 'save-game':
+                await this.sessionManager.saveSession();
                 return;
-            case 'alert':
-                vscode.window.showErrorMessage(message.text);
+            case 'load-game':
+                await this.loadGame();
                 return;
+            case 'setup-api-key':
+                await this.setupApiKey();
+                return;
+        }
+    }
+
+    private async startGame() {
+        try {
+            const openingMessage = await this.sessionManager.startNewSession();
+            this._panel.webview.postMessage({ command: 'assistant-message', text: openingMessage });
+        } catch (error: any) {
+            this._panel.webview.postMessage({ command: 'error-message', text: `Failed to start game: ${error.message}` });
+        }
+    }
+    
+    private async loadGame() {
+        const history = await this.sessionManager.loadSession();
+        if (history) {
+            this._panel.webview.postMessage({ command: 'load-history', history: history });
         }
     }
 
     private async handleUserMessage(text: string) {
         try {
+            this.sessionManager.addMessage('user', text);
             this._panel.webview.postMessage({ command: 'llm-response-start' });
             
-            const contextExtractor = new ContextExtractor();
-            const context = await contextExtractor.buildContextForChapterGeneration();
-            const template = await contextExtractor.getPromptTemplate('generation');
-
-            const systemPrompt = template
-                .replace('{{characters}}', context.characters)
-                .replace('{{world}}', context.world)
-                .replace('{{rules}}', context.rules)
-                .replace('{{timeline}}', context.timeline)
-                .replace('{{arc_map}}', context.arc_map)
-                .replace('{{summaries}}', context.recent_summaries)
-                .replace('{{open_foreshadows}}', context.open_foreshadows);
-            
-            const messages: ChatMessage[] = [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: text }
-            ];
+            const messages = this.sessionManager.getHistoryForLLM();
             
             const provider = new OpenRouterProvider();
             const result = await provider.chat({
@@ -108,29 +120,18 @@ export class ChatPanel {
                 },
             });
 
+            this.sessionManager.addMessage('assistant', result.text);
             this._panel.webview.postMessage({ command: 'llm-response-end', fullText: result.text });
 
         } catch (error: any) {
-            // --- ▼▼▼ ここからが修正箇所 ▼▼▼ ---
             const errorMessage = error.message || 'An unknown error occurred.';
-            
-            // Webview UIにエラーを通知
             this._panel.webview.postMessage({ command: 'llm-response-error', error: errorMessage });
 
-            // APIキー未設定のエラーを判定し、設定を促す
             if (errorMessage.includes('API key is not set')) {
-                const action = await vscode.window.showWarningMessage(
-                    'OpenRouter API key is not set. Please set it to use the chat.',
-                    'Set API Key'
-                );
-                if (action === 'Set API Key') {
-                    this.setupApiKey();
-                }
+                this._panel.webview.postMessage({ command: 'request-api-key' });
             } else {
-                // その他のエラー
-                vscode.window.showErrorMessage(`Error during chapter generation: ${errorMessage}`);
+                vscode.window.showErrorMessage(`Error during story generation: ${errorMessage}`);
             }
-            // --- ▲▲▲ ここまでが修正箇所 ▲▲▲ ---
         }
     }
 
@@ -166,14 +167,18 @@ export class ChatPanel {
 				<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 				<meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <link href="${styleUri}" rel="stylesheet">
-				<title>Novel Assistant Chat</title>
+				<title>Interactive Story Chat</title>
 			</head>
 			<body>
 				<div id="chat-container">
                     <div id="chat-log"></div>
                     <div id="input-container">
-                        <textarea id="message-input" placeholder="執筆内容を入力... (例: 第5章 倉庫の調査)"></textarea>
+                        <textarea id="message-input" placeholder="あなたの行動や発言を入力..."></textarea>
                         <button id="send-button">送信</button>
+                    </div>
+                    <div id="button-bar">
+                         <button id="save-button">セーブ</button>
+                         <button id="load-button">ロード</button>
                     </div>
                 </div>
 

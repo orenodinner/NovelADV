@@ -1,8 +1,8 @@
 {
-  "name": "novel-assistant",
-  "displayName": "Novel Assistant",
-  "description": "An extension to support long-form novel writing with LLMs, managing consistency and story bible.",
-  "version": "0.1.0",
+  "name": "novel-assistant-改",
+  "displayName": "Interactive Story Game Engine",
+  "description": "An extension to play interactive story games with LLMs.",
+  "version": "0.2.0",
   "publisher": "your-publisher-name",
   "engines": {
     "vscode": "^1.85.0"
@@ -12,68 +12,39 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onCommand:novel-assistant.initializeProject",
-    "onCommand:novel-assistant.openChat",
-    "onCommand:novel-assistant.createChapterFromTemplate",
-    "onCommand:novel-assistant.runConsistencyChecks",
-    "onCommand:novel-assistant.rebuildForeshadowIndex",
-    "onCommand:novel-assistant.exportReport",
-    "onWebviewPanel:novel-assistant.chatView"
+    "onCommand:interactive-story.initializeProject",
+    "onCommand:interactive-story.openChat",
+    "onWebviewPanel:interactive-story.chatView"
   ],
   "contributes": {
     "commands": [
       {
-        "command": "novel-assistant.initializeProject",
-        "title": "Novel: Initialize Story Project",
-        "category": "Novel Assistant"
+        "command": "interactive-story.initializeProject",
+        "title": "Story Game: Initialize New Scenario Project",
+        "category": "Interactive Story"
       },
       {
-        "command": "novel-assistant.openChat",
-        "title": "Novel: Open Chat",
-        "category": "Novel Assistant"
-      },
-      {
-        "command": "novel-assistant.createChapterFromTemplate",
-        "title": "Novel: Create Chapter from Template",
-        "category": "Novel Assistant"
-      },
-      {
-        "command": "novel-assistant.runConsistencyChecks",
-        "title": "Novel: Run Consistency Checks for Current Chapter",
-        "category": "Novel Assistant"
-      },
-      {
-        "command": "novel-assistant.rebuildForeshadowIndex",
-        "title": "Novel: Rebuild Foreshadow Index",
-        "category": "Novel Assistant"
-      },
-      {
-        "command": "novel-assistant.exportReport",
-        "title": "Novel: Export Report (HTML)",
-        "category": "Novel Assistant"
+        "command": "interactive-story.openChat",
+        "title": "Story Game: Open Chat / Start Game",
+        "category": "Interactive Story"
       }
     ],
     "keybindings": [
       {
-        "command": "novel-assistant.openChat",
+        "command": "interactive-story.openChat",
         "key": "ctrl+shift+j",
         "mac": "cmd+shift+j"
       }
     ],
- "configurationDefaults": {
-      "[jsonc]": {
-        "editor.defaultFormatter": "vscode.json-language-features"
-      },
+    "configurationDefaults": {
       "files.associations": {
         ".novelrc.json": "jsonc"
       }
     },
-
-
     "configuration": {
-      "title": "Novel Assistant",
+      "title": "Interactive Story Game Engine",
       "properties": {
-        "novelAssistant.provider": {
+        "interactive-story.provider": {
           "type": "string",
           "enum": [
             "openrouter",
@@ -82,78 +53,37 @@
           "default": "openrouter",
           "description": "The LLM provider to use."
         },
-        "novelAssistant.model": {
+        "interactive-story.model": {
           "type": "string",
           "default": "anthropic/claude-3.5-sonnet",
           "description": "The model identifier (e.g., 'anthropic/claude-3.5-sonnet', 'gpt-4o')."
         },
-        "novelAssistant.endpoint": {
+        "interactive-story.endpoint": {
           "type": "string",
           "default": "https://openrouter.ai/api/v1/chat/completions",
-          "description": "The API endpoint for chat completions. Automatically updated for known providers."
+          "description": "The API endpoint for chat completions."
         },
-        "novelAssistant.temperature": {
+        "interactive-story.temperature": {
           "type": "number",
-          "default": 0.7,
+          "default": 0.8,
           "minimum": 0,
           "maximum": 2,
-          "description": "Controls randomness. Lower is more deterministic."
+          "description": "Controls randomness. Higher is more creative."
         },
-        "novelAssistant.maxTokens": {
+        "interactive-story.maxTokens": {
           "type": "integer",
           "default": 3000,
           "description": "The maximum number of tokens to generate in a completion."
         },
-        "novelAssistant.output.chapterLengthChars": {
-          "type": "array",
-          "items": {
-            "type": "number"
-          },
-          "default": [
-            3000,
-            7000
-          ],
-          "description": "Target character count range [min, max] for a generated chapter."
-        },
-        "novelAssistant.output.summarySentences": {
-          "type": "integer",
-          "default": 5,
-          "description": "Number of sentences for the auto-generated summary."
-        },
-        "novelAssistant.consistency.strictness": {
-          "type": "string",
-          "enum": [
-            "low",
-            "medium",
-            "high"
-          ],
-          "default": "medium",
-          "description": "The strictness level for consistency checks."
-        },
-        "novelAssistant.providerOptions.openrouter.httpReferer": {
+        "interactive-story.providerOptions.openrouter.httpReferer": {
           "type": "string",
           "default": "",
           "description": "(Optional) The HTTP-Referer header to send to OpenRouter."
         },
-        "novelAssistant.providerOptions.openrouter.xTitle": {
+        "interactive-story.providerOptions.openrouter.xTitle": {
           "type": "string",
-          "default": "Novel Assistant for VS Code",
+          "default": "Interactive Story Game for VS Code",
           "description": "(Optional) The X-Title header to send to OpenRouter for identifying your app."
-        },
-        "novelAssistant.rateLimit.rpm": {
-          "type": "integer",
-          "default": 30,
-          "description": "Requests per minute limit."
-        },
-        "novelAssistant.rateLimit.burst": {
-          "type": "integer",
-          "default": 5,
-          "description": "Burst request allowance."
-        },
-        "novelAssistant.telemetry.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable anonymous telemetry to help improve the extension."
         }
       }
     }

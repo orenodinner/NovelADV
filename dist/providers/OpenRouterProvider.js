@@ -41,7 +41,6 @@ const KeytarService_1 = require("../services/KeytarService");
 class OpenRouterProvider {
     constructor() {
         this.name = 'openrouter';
-        this.supportsJSON = false; // OpenRouterはモデルによるので、拡張機能側でパースする前提でfalseに
         this.configService = ConfigService_1.ConfigService.getInstance();
         this.keytarService = KeytarService_1.KeytarService.getInstance();
     }

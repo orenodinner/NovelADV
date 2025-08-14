@@ -44,7 +44,7 @@ class ConfigService {
         this.loadConfig();
         // 設定が変更されたらリロードする
         const disposable = vscode.workspace.onDidChangeConfiguration(e => {
-            if (e.affectsConfiguration('novelAssistant')) {
+            if (e.affectsConfiguration('interactive-story')) {
                 this.loadConfig();
             }
         });
@@ -60,65 +60,43 @@ class ConfigService {
      * VS Codeの設定から設定値を読み込み、Zodスキーマで検証する
      */
     loadConfig() {
-        const rawConfig = vscode.workspace.getConfiguration('novelAssistant');
-        const novelRc = vscode.workspace.getConfiguration('novelrc'); // .novelrc.jsonの値を読む
-        // package.jsonと.novelrc.jsonから設定をマージ
+        const rawConfig = vscode.workspace.getConfiguration('interactive-story');
+        // package.jsonから設定をマージ
         const configObject = {
             provider: rawConfig.get('provider'),
             model: rawConfig.get('model'),
             endpoint: rawConfig.get('endpoint'),
             temperature: rawConfig.get('temperature'),
             maxTokens: rawConfig.get('maxTokens'),
-            output: {
-                chapterLengthChars: rawConfig.get('output.chapterLengthChars'),
-                summarySentences: rawConfig.get('output.summarySentences'),
-            },
-            // --- ▼▼▼ ここから追加 ▼▼▼ ---
-            paths: {
-                bible: novelRc.get('paths.bible', 'bible'),
-                outline: novelRc.get('paths.outline', 'outline'),
-                chapters: novelRc.get('paths.chapters', 'chapters'),
-                summaries: novelRc.get('paths.summaries', 'summaries'),
-                reports: novelRc.get('paths.reports', 'reports'),
-                prompts: novelRc.get('paths.prompts', 'prompts'),
-            },
-            // --- ▲▲▲ ここまで追加 ▲▲▲ ---
-            consistency: {
-                strictness: rawConfig.get('consistency.strictness'),
-            },
             providerOptions: {
                 openrouter: {
                     httpReferer: rawConfig.get('providerOptions.openrouter.httpReferer'),
                     xTitle: rawConfig.get('providerOptions.openrouter.xTitle'),
                 }
             },
-            rateLimit: {
-                rpm: rawConfig.get('rateLimit.rpm'),
-                burst: rawConfig.get('rateLimit.burst'),
-            },
-            telemetry: {
-                enabled: rawConfig.get('telemetry.enabled'),
-            }
         };
-        const result = types_1.NovelAssistantConfigSchema.safeParse(configObject);
+        const result = types_1.StoryGameConfigSchema.safeParse(configObject);
         if (result.success) {
             this.config = result.data;
-            console.log('Novel Assistant configuration loaded successfully.');
+            console.log('Interactive Story Game configuration loaded successfully.');
         }
         else {
             this.config = null;
-            vscode.window.showErrorMessage('Failed to load Novel Assistant configuration. Please check your settings.');
-            console.error('Novel Assistant configuration error:', result.error.flatten());
+            vscode.window.showErrorMessage('Failed to load Interactive Story Game configuration. Please check your settings.');
+            console.error('Interactive Story Game configuration error:', result.error.flatten());
         }
     }
     /**
      * 検証済みの設定オブジェクトを取得する
-     * @returns {NovelAssistantConfig} 型安全な設定オブジェクト
+     * @returns {StoryGameConfig} 型安全な設定オブジェクト
      * @throws {Error} 設定がロードまたは検証されていない場合にエラーをスロー
      */
     get() {
         if (!this.config) {
-            throw new Error('Novel Assistant configuration is not loaded or invalid.');
+            this.loadConfig(); // 設定がnullの場合、再読み込みを試みる
+            if (!this.config) { //それでもnullならエラー
+                throw new Error('Interactive Story Game configuration is not loaded or invalid.');
+            }
         }
         return this.config;
     }

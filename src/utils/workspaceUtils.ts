@@ -3,6 +3,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 
+const PROJECT_CONFIG_FILE = '.storygamesetting.json';
+
 /**
  * 現在のVS CodeワークスペースのルートURIを取得します。
  * @returns {vscode.Uri} ワークスペースのルートURI
@@ -16,31 +18,21 @@ export function getWorkspaceRoot(): vscode.Uri {
 }
 
 /**
- * 小説プロジェクトのルートディレクトリを特定します。
- * 現状はワークスペースルートに `.novelrc.json` があることを前提とします。
- * @returns {Promise<vscode.Uri>} 小説プロジェクトのルートURI
+ * ストーリーゲームプロジェクトのルートディレクトリを特定します。
+ * ワークスペースルートに `.storygamesetting.json` があることを前提とします。
+ * @returns {Promise<vscode.Uri>} プロジェクトのルートURI
  * @throws {Error} プロジェクトが見つからない場合にエラーをスローします。
  */
-export async function getNovelProjectRoot(): Promise<vscode.Uri> {
+export async function getProjectRoot(): Promise<vscode.Uri> {
     const root = getWorkspaceRoot();
-    const novelRcUri = vscode.Uri.joinPath(root, '.novelrc.json');
+    const configUri = vscode.Uri.joinPath(root, PROJECT_CONFIG_FILE);
     try {
-        await vscode.workspace.fs.stat(novelRcUri);
+        await vscode.workspace.fs.stat(configUri);
         return root;
     } catch {
-        throw new Error('The current workspace is not a valid Novel Assistant project. ".novelrc.json" not found.');
+        throw new Error(`The current workspace is not a valid Story Game project. "${PROJECT_CONFIG_FILE}" not found.`);
     }
 }
-
-/**
- * 設定ファイル (.novelrc.json) のURIを取得します。
- * @returns {Promise<vscode.Uri>} 設定ファイルのURI
- */
-export async function getNovelConfigFileUri(): Promise<vscode.Uri> {
-    const projectRoot = await getNovelProjectRoot();
-    return vscode.Uri.joinPath(projectRoot, '.novelrc.json');
-}
-
 
 /**
  * 指定されたURIのファイル内容を文字列として読み込みます。
