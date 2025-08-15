@@ -20,7 +20,6 @@ const LATEST_SUMMARY_JSON_CONTENT = `{
   "summary": "まだ要約はありません。"
 }`;
 
-// --- ▼▼▼ ここから新規テンプレート追加 ▼▼▼ ---
 const CHARACTER_UPDATE_PROMPT_MD_CONTENT = `# 指示
 あなたは、物語の進行に応じてキャラクター設定を更新するアシスタントです。
 以下の「キャラクターの既存設定」と「最新の物語の要約」を読み、キャラクターの設定に変化があれば更新してください。
@@ -50,7 +49,64 @@ const CHARACTER_UPDATE_PROMPT_MD_CONTENT = `# 指示
 
 ## 更新されたキャラクター設定
 `;
+
+const CHARACTER_GENERATION_PROMPT_MD_CONTENT = `# 指示
+あなたは、物語の会話ログ全体を分析し、指定されたキャラクターの人物像をまとめるアシスタントです。
+以下のルールに従って、新しいキャラクター設定シートを作成してください。
+
+## ルール
+- **マークダウン形式で出力**: 必ず以下の見出し構造で出力してください。
+  - \`# キャラクター設定: {{character_name}}\`
+  - \`- 一人称:\` (会話ログから推測)
+  - \`- 性格・特徴:\` (言動から推測される性格や身体的特徴など)
+  - \`- プレイヤーとの関係:\` (会話から読み取れる関係性)
+  - \`- 最近の出来事・状況:\` (ログ全体から、そのキャラクターが関わった主要な出来事を時系列で要約)
+- **客観的な事実に基づく**: 会話ログから明確に読み取れる情報のみを記述してください。憶測や創作は含めないでください。
+- **簡潔にまとめる**: 各項目は箇条書きで簡潔に記述してください。
+- **全文を出力**: 生成する内容は、これからファイルに保存されるキャラクター設定シートの全文です。指示や説明文は含めないでください。
+
+---
+
+## 分析対象の会話ログ
+{{story_log}}
+
+---
+
+## 作成するキャラクター名
+{{character_name}}
+
+---
+
+## 生成されたキャラクター設定シート
+`;
+
+// --- ▼▼▼ ここから新規テンプレート追加 ▼▼▼ ---
+const LOG_DIGEST_PROMPT_MD_CONTENT = `# 指示
+あなたは、長大な会話ログの中から、特定のキャラクターに関する情報のみを抽出し、時系列で要約するアシスタントです。
+以下のルールに従って、指定されたキャラクターが関与した出来事を要約してください。
+
+## ルール
+- **焦点は "{{character_name}}"**: 会話ログ全体の中から、キャラクター「{{character_name}}」の言動、彼/彼女に関する言及、彼/彼女が関わった重要な出来事のみを抽出してください。
+- **時系列で記述**: 出来事を発生した順に、箇条書きで簡潔にまとめてください。
+- **客観的事実のみ**: ログから読み取れる事実のみを記述し、あなたの解釈や創作は加えないでください。
+- **要約の目的**: この要約は、後で別のAIがキャラクターシートを作成するための基礎資料となります。キャラクターの性格、特徴、プレイヤーとの関係性がわかるような重要な情報を漏らさずに含めてください。
+
+---
+
+## 分析対象の会話ログ
+{{story_log}}
+
+---
+
+## 要約対象のキャラクター名
+{{character_name}}
+
+---
+
+## 「{{character_name}}」に関する出来事の要約
+`;
 // --- ▲▲▲ ここまで新規テンプレート追加 ▲▲▲ ---
+
 
 const WORLD_SETTING_MD_CONTENT = `# 舞台設定
 # このファイルに、物語の基本的な世界観や背景を記述します。
@@ -224,7 +280,7 @@ export async function initializeProject() {
                 'logs', 
                 'logs/autosaves',
                 'logs/archives',
-                'logs/transcripts', // トランスクリプト用ディレクトリを追加
+                'logs/transcripts',
                 'exports',
                 'summaries'
             ];
@@ -234,7 +290,6 @@ export async function initializeProject() {
 
             progress.report({ message: 'Creating scenario files...', increment: 40 });
             
-            // --- ▼▼▼ ここから修正 ▼▼▼ ---
             const filesToCreate: { filePath: string; content: string }[] = [
                 { filePath: '.storygamesetting.json', content: STORYGAMESETTING_JSON_CONTENT },
                 { filePath: '.gitignore', content: GITIGNORE_CONTENT },
@@ -247,8 +302,11 @@ export async function initializeProject() {
                 { filePath: path.join('scenario', 'characters', 'naruse_mai.md'), content: NARUSE_MAI_MD_CONTENT },
                 { filePath: path.join('scenario', 'prompts', 'summarization_prompt.md'), content: SUMMARIZATION_PROMPT_MD_CONTENT },
                 { filePath: path.join('scenario', 'prompts', 'character_update_prompt.md'), content: CHARACTER_UPDATE_PROMPT_MD_CONTENT },
+                { filePath: path.join('scenario', 'prompts', 'character_generation_prompt.md'), content: CHARACTER_GENERATION_PROMPT_MD_CONTENT },
+                // --- ▼▼▼ ここから修正 ▼▼▼ ---
+                { filePath: path.join('scenario', 'prompts', 'log_digest_prompt.md'), content: LOG_DIGEST_PROMPT_MD_CONTENT },
+                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             ];
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             
             const encoder = new TextEncoder();
             for (const file of filesToCreate) {

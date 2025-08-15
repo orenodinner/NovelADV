@@ -6,6 +6,19 @@ import * as path from 'path';
 const PROJECT_CONFIG_FILE = '.storygamesetting.json';
 
 /**
+ * 文字列をファイル名に適した形式（スラグ）に変換する
+ * 例: "クリス アンダー" -> "クリス-アンダー"
+ * @param text 変換する文字列
+ */
+export function toSlug(text: string): string {
+    return text
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, '-') // スペースや連続する空白をハイフンに
+        .replace(/[^\w-ぁ-んァ-ン一-龯]/g, ''); // 英数字、アンダースコア、ハイフン、ひらがな、カタカナ、漢字以外を削除
+}
+
+/**
  * 現在のVS CodeワークスペースのルートURIを取得します。
  * @returns {vscode.Uri} ワークスペースのルートURI
  * @throws {Error} ワークスペースが開かれていない場合にエラーをスローします。
@@ -51,6 +64,43 @@ export async function readFileContent(fileUri: vscode.Uri): Promise<string> {
 }
 
 /**
+ * 指定したディレクトリ内のすべてのファイルの内容を読み込み、一つの文字列に結合します。
+ * ファイルは名前順（時系列）でソートされます。
+ * @param dirUri ディレクトリのURI
+ * @param fileExtension 対象とするファイルの拡張子 (例: '.md')
+ * @returns {Promise<string>} 結合されたファイル内容
+ */
+export async function readAllFilesAsString(dirUri: vscode.Uri, fileExtension: string): Promise<string> {
+    try {
+        const allFiles = (await vscode.workspace.fs.readDirectory(dirUri))
+            .filter(([name, type]) => type === vscode.FileType.File && name.endsWith(fileExtension))
+            .map(([name, _]) => name)
+            .sort(); // ファイル名でソート（タイムスタンプ順になることを期待）
+
+        if (allFiles.length === 0) {
+            return '';
+        }
+
+        const contents = await Promise.all(
+            allFiles.map(fileName => {
+                const fileUri = vscode.Uri.joinPath(dirUri, fileName);
+                return readFileContent(fileUri);
+            })
+        );
+        
+        return contents.join('\n\n---\n\n'); // ファイル間を区切り文字で結合
+    } catch (error) {
+        if (error instanceof vscode.FileSystemError && error.code === 'FileNotFound') {
+            console.warn(`Directory not found: ${dirUri.fsPath}. Returning empty content.`);
+            return '';
+        }
+        console.error(`Failed to read files from directory: ${dirUri.fsPath}`, error);
+        throw new Error(`Could not read files from directory: ${path.basename(dirUri.fsPath)}`);
+    }
+}
+
+
+/**
  * 指定されたURIのファイルに文字列を書き込みます。
  * @param {vscode.Uri} fileUri 書き込むファイルのURI
  * @param {string} content 書き込む内容
@@ -66,7 +116,6 @@ export async function writeFileContent(fileUri: vscode.Uri, content: string): Pr
     }
 }
 
-// --- ▼▼▼ ここから新規関数追加 ▼▼▼ ---
 /**
  * 指定されたURIのファイルに文字列を追記します。ファイルが存在しない場合は新規作成します。
  * @param {vscode.Uri} fileUri 追記するファイルのURI
@@ -92,7 +141,6 @@ export async function appendFileContent(fileUri: vscode.Uri, content: string): P
         throw new Error(`Could not append to file: ${path.basename(fileUri.fsPath)}`);
     }
 }
-// --- ▲▲▲ ここまで新規関数追加 ▲▲▲ ---
 
 
 /**

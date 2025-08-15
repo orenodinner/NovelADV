@@ -6,6 +6,9 @@ import { KeytarService } from '../services/KeytarService';
 import { getNonce } from './getNonce';
 import { ChatMessage } from '../types';
 import { SessionManager } from '../services/SessionManager';
+// --- ▼▼▼ ここから追加 ▼▼▼ ---
+import { CharacterGeneratorService } from '../services/CharacterGeneratorService';
+// --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
 export class ChatPanel {
     public static currentPanel: ChatPanel | undefined;
@@ -15,7 +18,10 @@ export class ChatPanel {
     private readonly _panel: vscode.WebviewPanel;
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
-    private sessionManager: SessionManager; // SessionManagerのインスタンスを保持
+    private sessionManager: SessionManager;
+    // --- ▼▼▼ ここから追加 ▼▼▼ ---
+    private characterGenerator: CharacterGeneratorService;
+    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
 
     public static createOrShow(extensionUri: vscode.Uri) {
@@ -60,7 +66,10 @@ export class ChatPanel {
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
         this._panel = panel;
         this._extensionUri = extensionUri;
-         this.sessionManager = SessionManager.getInstance(); // シングルトンインスタンスを取得
+        this.sessionManager = SessionManager.getInstance();
+        // --- ▼▼▼ ここから追加 ▼▼▼ ---
+        this.characterGenerator = CharacterGeneratorService.getInstance();
+        // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         
@@ -125,14 +134,48 @@ export class ChatPanel {
         }
     }
 
+    // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
+    private async handleCommand(text: string) {
+        const parts = text.substring(1).trim().split(/\s+/);
+        const command = parts[0];
+        const args = parts.slice(1);
+
+        if (command === 'chara_add' && args.length > 0) {
+            const characterName = args.join(' ');
+            vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `Generating character sheet for "${characterName}"...`,
+                cancellable: false
+            }, async (progress) => {
+                try {
+                    const resultMessage = await this.characterGenerator.generateCharacter(characterName);
+                    vscode.window.showInformationMessage(resultMessage);
+                    this._panel.webview.postMessage({ command: 'assistant-message', text: `[SYSTEM] ${resultMessage}` });
+                } catch (error: any) {
+                    vscode.window.showErrorMessage(error.message);
+                    this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM ERROR] ${error.message}` });
+                }
+            });
+        } else {
+            const errorMessage = `Unknown command or invalid arguments: ${text}`;
+            vscode.window.showWarningMessage(errorMessage);
+            this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM] ${errorMessage}` });
+        }
+    }
+
     private async handleUserMessage(text: string) {
+        // コマンド実行
+        if (text.startsWith('!')) {
+            await this.handleCommand(text);
+            return;
+        }
+
+        // 通常の対話処理
         try {
-            // このaddMessageの後、SessionManager内部で要約がトリガーされる可能性がある
             await this.sessionManager.addMessage('user', text);
             
             this._panel.webview.postMessage({ command: 'llm-response-start' });
             
-            // このgetHistoryForLLMは、要約を含んだシステムプロンプトを生成する
             const messages = this.sessionManager.getHistoryForLLM();
             
             const provider = new OpenRouterProvider();
@@ -158,6 +201,7 @@ export class ChatPanel {
             }
         }
     }
+    // --- ▲▲▲ ここまでメソッド修正 ▲▲▲ ---
 
     private async setupApiKey() {
         const apiKey = await vscode.window.showInputBox({
