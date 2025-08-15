@@ -66,6 +66,35 @@ export async function writeFileContent(fileUri: vscode.Uri, content: string): Pr
     }
 }
 
+// --- ▼▼▼ ここから新規関数追加 ▼▼▼ ---
+/**
+ * 指定されたURIのファイルに文字列を追記します。ファイルが存在しない場合は新規作成します。
+ * @param {vscode.Uri} fileUri 追記するファイルのURI
+ * @param {string} content 追記する内容
+ * @returns {Promise<void>}
+ */
+export async function appendFileContent(fileUri: vscode.Uri, content: string): Promise<void> {
+    try {
+        let existingContent = '';
+        try {
+            const fileContent = await vscode.workspace.fs.readFile(fileUri);
+            existingContent = new TextDecoder().decode(fileContent);
+        } catch (error) {
+            // ファイルが存在しない場合は、existingContentは空のまま
+            if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) {
+                throw error;
+            }
+        }
+        const newContent = existingContent + content;
+        await vscode.workspace.fs.writeFile(fileUri, new TextEncoder().encode(newContent));
+    } catch (error) {
+        console.error(`Failed to append to file: ${fileUri.fsPath}`, error);
+        throw new Error(`Could not append to file: ${path.basename(fileUri.fsPath)}`);
+    }
+}
+// --- ▲▲▲ ここまで新規関数追加 ▲▲▲ ---
+
+
 /**
  * 指定されたパスがディレクトリとして存在するか確認し、なければ作成します。
  * @param dirUri 作成するディレクトリのURI

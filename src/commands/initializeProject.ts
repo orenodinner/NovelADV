@@ -197,6 +197,7 @@ export async function initializeProject() {
                 'logs', 
                 'logs/autosaves',
                 'logs/archives',
+                'logs/transcripts', // トランスクリプト用ディレクトリを追加
                 'exports',
                 'summaries'
             ];

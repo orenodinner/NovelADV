@@ -6,7 +6,7 @@ import { ChatMessage, SessionData } from '../types';
 import { StoryContextBuilder } from './StoryContextBuilder';
 import { SummarizerService } from './SummarizerService';
 import { CharacterUpdaterService } from './CharacterUpdaterService';
-import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists } from '../utils/workspaceUtils';
+import { getProjectRoot, readFileContent, writeFileContent, ensureDirectoryExists, appendFileContent } from '../utils/workspaceUtils';
 
 export class SessionManager implements vscode.Disposable {
     private static instance: SessionManager;
@@ -20,12 +20,11 @@ export class SessionManager implements vscode.Disposable {
     private characterUpdater: CharacterUpdaterService;
 
     private currentSessionFileUri: vscode.Uri | null = null;
+    private transcriptFileUri: vscode.Uri | null = null;
     private isSummarizing: boolean = false;
     
-    // --- ▼▼▼ ここから修正 ▼▼▼ ---
-    private shortTermMemoryMessages: number = 10; // デフォルト値
-    private summarizationTriggerMessages: number = 20; // デフォルト値
-    // --- ▲▲▲ ここまで修正 ▲▲▲ ---
+    private shortTermMemoryMessages: number = 10;
+    private summarizationTriggerMessages: number = 20;
 
     private constructor() {
         this.contextBuilder = new StoryContextBuilder();
@@ -53,22 +52,19 @@ export class SessionManager implements vscode.Disposable {
             const content = await readFileContent(settingFileUri);
             const settings = JSON.parse(content);
 
-            // --- ▼▼▼ ここから修正 ▼▼▼ ---
-            // 設定ファイルから読み込むキーを変更
             if (settings.context && typeof settings.context.shortTermMemoryMessages === 'number') {
                 this.shortTermMemoryMessages = settings.context.shortTermMemoryMessages;
             } else {
-                this.shortTermMemoryMessages = 10; // デフォルト値
+                this.shortTermMemoryMessages = 10;
             }
 
             if (settings.context && typeof settings.context.summarizationTriggerMessages === 'number') {
                 this.summarizationTriggerMessages = settings.context.summarizationTriggerMessages;
             } else {
-                this.summarizationTriggerMessages = 20; // デフォルト値
+                this.summarizationTriggerMessages = 20;
             }
             
             console.log(`Project settings loaded: shortTermMemoryMessages=${this.shortTermMemoryMessages}, summarizationTriggerMessages=${this.summarizationTriggerMessages}`);
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         } catch (error) {
             console.warn("Could not load .storygamesetting.json. Using default context settings.", error);
@@ -94,17 +90,55 @@ export class SessionManager implements vscode.Disposable {
     private async prepareNewSessionFiles(): Promise<void> {
         try {
             const projectRoot = await getProjectRoot();
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+
+            // 1. オートセーブ用JSONファイルの準備
             const autoSavesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'autosaves');
             await ensureDirectoryExists(autoSavesDirUri);
-
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const fileName = `session_${timestamp}.json`;
-            this.currentSessionFileUri = vscode.Uri.joinPath(autoSavesDirUri, fileName);
-
+            const sessionFileName = `session_${timestamp}.json`;
+            this.currentSessionFileUri = vscode.Uri.joinPath(autoSavesDirUri, sessionFileName);
             await this.updateCurrentSessionFile();
+
+            // 2. トランスクリプト用Markdownファイルの準備
+            const transcriptsDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'transcripts');
+            await ensureDirectoryExists(transcriptsDirUri);
+            const transcriptFileName = `transcript_${timestamp}.md`;
+            this.transcriptFileUri = vscode.Uri.joinPath(transcriptsDirUri, transcriptFileName);
+
+            // ファイルにヘッダーを書き込む
+            const header = `# Story Transcript\n\n- **Session Started:** ${new Date().toLocaleString()}\n- **Project:** ${path.basename(projectRoot.fsPath)}\n\n---\n\n`;
+            await writeFileContent(this.transcriptFileUri, header);
+
         } catch (error: any) {
-            console.error("Failed to prepare new session file:", error);
+            console.error("Failed to prepare new session files:", error);
             this.currentSessionFileUri = null;
+            this.transcriptFileUri = null;
+        }
+    }
+    
+    /**
+     * トランスクリプトファイルにメッセージを追記する
+     * @param role メッセージの役割
+     * @param content メッセージの内容
+     */
+    private async appendToTranscript(role: 'user' | 'assistant', content: string): Promise<void> {
+        if (!this.transcriptFileUri) return;
+
+        try {
+            let formattedMessage: string;
+            if (role === 'user') {
+                formattedMessage = `**You:**\n${content}\n\n`;
+            } else {
+                // アシスタントの最初のメッセージ（オープニング）は特別扱い
+                if (this.history.length === 1) {
+                     formattedMessage = `**Opening Scene:**\n${content}\n\n---\n\n`;
+                } else {
+                     formattedMessage = `${content}\n\n---\n\n`;
+                }
+            }
+            await appendFileContent(this.transcriptFileUri, formattedMessage);
+        } catch (error) {
+            console.error("Failed to append to transcript:", error);
         }
     }
 
@@ -156,21 +190,19 @@ export class SessionManager implements vscode.Disposable {
     public async addMessage(role: 'user' | 'assistant', content: string): Promise<void> {
         this.history.push({ role, content });
         await this.updateCurrentSessionFile();
+        await this.appendToTranscript(role, content);
 
         // ユーザーとアシスタントの両方のメッセージが追加された後にチェック
         await this.triggerSummarizationIfNeeded();
     }
     
     private async triggerSummarizationIfNeeded(): Promise<void> {
-        // --- ▼▼▼ ここから修正 ▼▼▼ ---
-        // ターン数ではなく、history配列の長さ（メッセージ数）で直接比較
         if (this.isSummarizing || this.history.length < this.summarizationTriggerMessages) {
             return;
         }
 
         this.isSummarizing = true;
         console.log(`[Summarizer] Triggered at ${this.history.length} messages. Summarizing...`);
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         
         vscode.window.withProgress({
             location: vscode.ProgressLocation.Notification,
@@ -178,10 +210,7 @@ export class SessionManager implements vscode.Disposable {
             cancellable: false
         }, async (progress) => {
             try {
-                // --- ▼▼▼ ここから修正 ▼▼▼ ---
-                // 残すメッセージ数に基づいて分割点を計算
                 const sliceIndex = this.history.length > this.shortTermMemoryMessages ? this.history.length - this.shortTermMemoryMessages : 0;
-                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
                 
                 const logToSummarize = this.history.slice(0, sliceIndex);
                 const remainingHistory = this.history.slice(sliceIndex);
@@ -252,10 +281,7 @@ ${this.summary || "物語は始まったばかりです。"}
 ここからが現在の会話です。プレイヤーの最後の発言に応答してください。
 `.trim();
 
-        // --- ▼▼▼ ここから修正 ▼▼▼ ---
-        // メッセージ数で履歴を切り出す
         const recentHistory = this.history.slice(-this.shortTermMemoryMessages);
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
         
         return [{ role: 'system', content: fullSystemPrompt }, ...recentHistory];
     }

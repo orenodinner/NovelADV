@@ -35,7 +35,6 @@ async function createDefaultFiles(newProjectRoot: vscode.Uri) {
     const fs = vscode.workspace.fs;
     const encoder = new TextEncoder();
 
-    // --- ▼▼▼ ここから修正 ▼▼▼ ---
     const settingFileContent = `{
   "$schema": "https://example.com/storygamesetting.schema.json",
   "llmProvider": "openrouter",
@@ -45,7 +44,6 @@ async function createDefaultFiles(newProjectRoot: vscode.Uri) {
     "summarizationTriggerMessages": 20
   }
 }`;
-    // --- ▲▲▲ ここまで修正 ▲▲▲ ---
     const settingFilePath = vscode.Uri.joinPath(newProjectRoot, '.storygamesetting.json');
     await fs.writeFile(settingFilePath, encoder.encode(settingFileContent));
     
@@ -106,7 +104,19 @@ export async function forkProject() {
             progress.report({ message: 'Creating new project structure...', increment: 20 });
             
             const fs = vscode.workspace.fs;
-            const dirs = ['scenario', 'scenario/characters', 'scenario/prompts', 'logs', 'logs/autosaves', 'logs/archives', 'exports', 'summaries'];
+            // --- ▼▼▼ ここから修正 ▼▼▼ ---
+            const dirs = [
+                'scenario', 
+                'scenario/characters', 
+                'scenario/prompts', 
+                'logs', 
+                'logs/autosaves', 
+                'logs/archives', 
+                'logs/transcripts', // トランスクリプト用ディレクトリを追加
+                'exports', 
+                'summaries'
+            ];
+            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             for (const dir of dirs) {
                 await fs.createDirectory(vscode.Uri.joinPath(newProjectRoot, dir));
             }
