@@ -6,9 +6,7 @@ import { KeytarService } from '../services/KeytarService';
 import { getNonce } from './getNonce';
 import { ChatMessage } from '../types';
 import { SessionManager } from '../services/SessionManager';
-// --- ▼▼▼ ここから追加 ▼▼▼ ---
 import { CharacterGeneratorService } from '../services/CharacterGeneratorService';
-// --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
 export class ChatPanel {
     public static currentPanel: ChatPanel | undefined;
@@ -19,9 +17,7 @@ export class ChatPanel {
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
     private sessionManager: SessionManager;
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     private characterGenerator: CharacterGeneratorService;
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
 
     public static createOrShow(extensionUri: vscode.Uri) {
@@ -30,10 +26,9 @@ export class ChatPanel {
             : undefined;
 
        
-        // パネルが既に存在する場合、再表示して最新の履歴を送信する
         if (ChatPanel.currentPanel) {
             ChatPanel.currentPanel._panel.reveal(column);
-            ChatPanel.currentPanel.restoreHistory(); // 履歴を復元するメソッドを呼び出す
+            ChatPanel.currentPanel.restoreHistory();
             return;
         }
       
@@ -43,7 +38,6 @@ export class ChatPanel {
             column || vscode.ViewColumn.Two,
             {
                 enableScripts: true,
-                // 非表示になってもWebviewの状態を維持する
                 retainContextWhenHidden: true,
                 localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')]
             }
@@ -52,9 +46,6 @@ export class ChatPanel {
         ChatPanel.currentPanel = new ChatPanel(panel, extensionUri);
     }
     
-    /**
-     * Webviewに現在の対話履歴を送信してUIを復元させる
-     */
     private restoreHistory() {
         const history = this.sessionManager.getHistory();
         if (history && history.length > 0) {
@@ -67,9 +58,7 @@ export class ChatPanel {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this.sessionManager = SessionManager.getInstance();
-        // --- ▼▼▼ ここから追加 ▼▼▼ ---
         this.characterGenerator = CharacterGeneratorService.getInstance();
-        // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         
@@ -96,7 +85,6 @@ export class ChatPanel {
     private async _handleWebviewMessage(message: any) {
         switch (message.command) {
             case 'webview-ready':
-                // 履歴が空の場合のみ新規ゲーム開始、そうでなければ履歴を復元
                 if (this.sessionManager.getHistory().length === 0) {
                     await this.startGame();
                 } else {
@@ -136,19 +124,32 @@ export class ChatPanel {
 
     // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
     private async handleCommand(text: string) {
-        const parts = text.substring(1).trim().split(/\s+/);
-        const command = parts[0];
+        const commandText = text.substring(1).trim();
+        const parts = commandText.split(/\s+/);
+        const commandName = parts[0];
         const args = parts.slice(1);
 
-        if (command === 'chara_add' && args.length > 0) {
-            const characterName = args.join(' ');
+        if (commandName === 'chara_add') {
+            if (args.length === 0) {
+                const helpMessage = `[SYSTEM] Invalid command format. Use: !chara_add Full Name`;
+                this._panel.webview.postMessage({ command: 'error-message', text: helpMessage });
+                return;
+            }
+
+            // 引数を結合してフルネームを作成
+            const fullName = args.join(' ');
+
+            // フルネームと、それを分割した各部分を検索キーとして自動生成
+            const searchKeys = [fullName, ...args];
+
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
-                title: `Generating character sheet for "${characterName}"...`,
+                title: `Generating character sheet for "${fullName}"...`,
                 cancellable: false
             }, async (progress) => {
                 try {
-                    const resultMessage = await this.characterGenerator.generateCharacter(characterName);
+                    progress.report({ message: 'Analyzing logs...' });
+                    const resultMessage = await this.characterGenerator.generateCharacter(fullName, searchKeys);
                     vscode.window.showInformationMessage(resultMessage);
                     this._panel.webview.postMessage({ command: 'assistant-message', text: `[SYSTEM] ${resultMessage}` });
                 } catch (error: any) {
@@ -157,20 +158,18 @@ export class ChatPanel {
                 }
             });
         } else {
-            const errorMessage = `Unknown command or invalid arguments: ${text}`;
+            const errorMessage = `Unknown command: ${commandName}`;
             vscode.window.showWarningMessage(errorMessage);
             this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM] ${errorMessage}` });
         }
     }
 
     private async handleUserMessage(text: string) {
-        // コマンド実行
         if (text.startsWith('!')) {
             await this.handleCommand(text);
             return;
         }
 
-        // 通常の対話処理
         try {
             await this.sessionManager.addMessage('user', text);
             

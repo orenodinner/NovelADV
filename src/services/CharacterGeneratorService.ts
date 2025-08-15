@@ -6,15 +6,12 @@ import { ChatMessage } from '../types';
 import { getProjectRoot, readFileContent, writeFileContent, readAllFilesAsString, toSlug } from '../utils/workspaceUtils';
 import { OpenRouterProvider } from '../providers/OpenRouterProvider';
 
-// 中間要約（ダイジェスト）を作成する文字数のしきい値
 const LOG_LENGTH_THRESHOLD_FOR_DIGEST = 15000;
 
 export class CharacterGeneratorService {
     private static instance: CharacterGeneratorService;
     private generationPromptTemplate: string | null = null;
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     private logDigestPromptTemplate: string | null = null;
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
     private provider: OpenRouterProvider;
 
     private constructor() {
@@ -28,9 +25,6 @@ export class CharacterGeneratorService {
         return CharacterGeneratorService.instance;
     }
 
-    /**
-     * 各種プロンプトテンプレートをファイルから読み込む
-     */
     private async loadPromptTemplates(): Promise<{ generation: string, digest: string }> {
         if (this.generationPromptTemplate && this.logDigestPromptTemplate) {
             return { generation: this.generationPromptTemplate, digest: this.logDigestPromptTemplate };
@@ -55,30 +49,31 @@ export class CharacterGeneratorService {
         }
     }
 
+    // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
     /**
-     * 指定されたキャラクター名を含むログのブロックを抽出する
+     * 指定された複数の検索キーのいずれかを含むログのブロックを抽出する
+     * @param fullLog - 物語の全ログ
+     * @param searchKeys - 検索対象のキー（姓、名、愛称など）の配列
+     * @returns フィルタリングされたログの文字列
      */
-    private filterLogForCharacter(fullLog: string, characterName: string): string {
+    private filterLogForCharacter(fullLog: string, searchKeys: string[]): string {
+        // 各検索キーに対して正規表現オブジェクトを作成（大文字小文字を区別しない）
+        const regexes = searchKeys.map(key => new RegExp(key, 'i'));
+        
         const blocks = fullLog.split('\n---\n');
         const relevantBlocks = blocks.filter(block => {
-            const regex = new RegExp(characterName, 'i');
-            return regex.test(block);
+            // いずれかの正規表現にマッチすればtrueを返す
+            return regexes.some(regex => regex.test(block));
         });
 
         if (relevantBlocks.length === 0) {
-            return '（指定されたキャラクターの登場シーンが見つかりませんでした）';
+            return `（検索キー [${searchKeys.join(', ')}] に一致する登場シーンが見つかりませんでした）`;
         }
 
         return relevantBlocks.join('\n---\n');
     }
+    // --- ▲▲▲ ここまでメソッド修正 ▲▲▲ ---
 
-    // --- ▼▼▼ ここから新規メソッド追加 ▼▼▼ ---
-    /**
-     * 長いログを中間要約（ダイジェスト）に変換する
-     * @param longLog - 要約対象の長いログ
-     * @param characterName - 対象キャラクター名
-     * @returns 要約されたログ文字列
-     */
     private async createLogDigest(longLog: string, characterName: string): Promise<string> {
         console.log(`Log is too long (${longLog.length} chars). Creating a digest for "${characterName}"...`);
         
@@ -92,7 +87,7 @@ export class CharacterGeneratorService {
 
         const result = await this.provider.chat({
             messages,
-            temperature: 0.0, // 事実ベースの要約のため創造性をゼロに
+            temperature: 0.0,
         });
 
         if (!result.text) {
@@ -102,25 +97,29 @@ export class CharacterGeneratorService {
         console.log(`Digest created successfully.`);
         return result.text.trim();
     }
-    // --- ▲▲▲ ここまで新規メソッド追加 ▲▲▲ ---
 
-
+    // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
     /**
      * 新しいキャラクターシートを生成してファイルに保存する
+     * @param fullName - 作成するキャラクターのフルネーム
+     * @param searchKeys - ログ検索に使用するキーの配列
      */
-    public async generateCharacter(characterName: string): Promise<string> {
-        if (!characterName || characterName.trim() === '') {
-            throw new Error('Character name cannot be empty.');
+    public async generateCharacter(fullName: string, searchKeys: string[]): Promise<string> {
+        if (!fullName || fullName.trim() === '') {
+            throw new Error('Full name cannot be empty.');
+        }
+        if (!searchKeys || searchKeys.length === 0) {
+            throw new Error('At least one search key is required.');
         }
 
         const projectRoot = await getProjectRoot();
         const charactersDirUri = vscode.Uri.joinPath(projectRoot, 'scenario', 'characters');
-        const slugName = toSlug(characterName);
+        const slugName = toSlug(fullName);
         const newCharFileUri = vscode.Uri.joinPath(charactersDirUri, `${slugName}.md`);
 
         try {
             await vscode.workspace.fs.stat(newCharFileUri);
-            throw new Error(`Character file for "${characterName}" already exists.`);
+            throw new Error(`Character file for "${fullName}" already exists.`);
         } catch (error) {
             if (!(error instanceof vscode.FileSystemError && error.code === 'FileNotFound')) {
                 throw error;
@@ -133,20 +132,17 @@ export class CharacterGeneratorService {
             throw new Error('No story logs (transcripts) found to analyze.');
         }
 
-        let logForGeneration = this.filterLogForCharacter(fullLog, characterName);
+        let logForGeneration = this.filterLogForCharacter(fullLog, searchKeys);
 
-        // --- ▼▼▼ ここからロジック修正 ▼▼▼ ---
-        // ログがしきい値より長い場合、中間要約を作成する
         if (logForGeneration.length > LOG_LENGTH_THRESHOLD_FOR_DIGEST) {
-            logForGeneration = await this.createLogDigest(logForGeneration, characterName);
+            logForGeneration = await this.createLogDigest(logForGeneration, fullName);
         }
-        // --- ▲▲▲ ここまでロジック修正 ▲▲▲ ---
 
         const { generation: template } = await this.loadPromptTemplates();
         
         const prompt = template
             .replace(/\{\{story_log\}\}/g, logForGeneration)
-            .replace(/\{\{character_name\}\}/g, characterName);
+            .replace(/\{\{character_name\}\}/g, fullName); // ここではフルネームを使用
 
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
 
@@ -161,6 +157,7 @@ export class CharacterGeneratorService {
 
         await writeFileContent(newCharFileUri, result.text.trim());
 
-        return `Successfully generated and saved character sheet for "${characterName}".`;
+        return `Successfully generated and saved character sheet for "${fullName}".`;
     }
+    // --- ▲▲▲ ここまでメソッド修正 ▲▲▲ ---
 }

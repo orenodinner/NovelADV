@@ -2,6 +2,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { toSlug } from '../utils/workspaceUtils';
 
 // --- ファイルテンプレート ---
 
@@ -80,7 +81,6 @@ const CHARACTER_GENERATION_PROMPT_MD_CONTENT = `# 指示
 ## 生成されたキャラクター設定シート
 `;
 
-// --- ▼▼▼ ここから新規テンプレート追加 ▼▼▼ ---
 const LOG_DIGEST_PROMPT_MD_CONTENT = `# 指示
 あなたは、長大な会話ログの中から、特定のキャラクターに関する情報のみを抽出し、時系列で要約するアシスタントです。
 以下のルールに従って、指定されたキャラクターが関与した出来事を要約してください。
@@ -105,8 +105,6 @@ const LOG_DIGEST_PROMPT_MD_CONTENT = `# 指示
 
 ## 「{{character_name}}」に関する出来事の要約
 `;
-// --- ▲▲▲ ここまで新規テンプレート追加 ▲▲▲ ---
-
 
 const WORLD_SETTING_MD_CONTENT = `# 舞台設定
 # このファイルに、物語の基本的な世界観や背景を記述します。
@@ -141,6 +139,8 @@ const AI_RULES_MD_CONTENT = `# AIへの指示
 ## 厳禁事項
 - 角括弧の外に地の文（例：「私は〜と考えた」「彼女は心の中で〜」）。
 - 主人公（プレイヤー）の行動・感情・選択の**決めつけ**（提案は可、決定は常に主人公（プレイヤー））。
+- 人物名：「セリフ」の構文(例：「クリス：「お茶を入れましょうか？」」)
+- []内に情景描写(例：[居室にクリスが座って待っていた])
 - 選択肢の列挙（A/B/Cなど）。**質問文**で誘導する。
 
 ## 振る舞いのルール
@@ -157,13 +157,13 @@ const AI_RULES_MD_CONTENT = `# AIへの指示
 const OPENING_SCENE_MD_CONTENT = `# ゲーム開始時の状況
 # プレイヤーがゲームを開始したときに最初に表示されるメッセージです。
 
-配属初日、「警視庁特別女子捜査局」の居室に一人の女性が待っていた。彼女は警視庁特別女子捜査局の秘書官クリス・アンダーだ。
+配属初日、「警視庁特別女子捜査局」の居室に一つの女性が待っていた。彼女は警視庁特別女子捜査局の秘書官クリス・アンダーだ。
 
 「ジン局長、お待ちしておりました。私があなたの秘書を務めます、クリス・アンダーです。これから、お手続きと寮のご案内をさせていただきますね」
 `;
 
-const CHRIS_UNDER_MD_CONTENT = `# キャラクター設定: クリス・アンダー
-- 名前: クリス  アンダー
+const CHRIS_UNDER_MD_CONTENT = `# キャラクター設定: クリス アンダー
+- 名前: クリス アンダー
 - 一人称：私
 - 胸の大きさ: Eカップ
 - 性格: 落ち着いた口調。主人公に惚れているがあまり表に出さない。冷静に仕事をこなす。
@@ -178,6 +178,7 @@ const NARUSE_MAI_MD_CONTENT = `# キャラクター設定: 成瀬 真衣
 - 役職：捜査官
 `;
 
+// --- ▼▼▼ ここに抜けていた定義を追加 ▼▼▼ ---
 const SUMMARIZATION_PROMPT_MD_CONTENT = `# 指示
 あなたは、対話形式の物語の会話ログを要約するアシスタントです。
 以下のルールに従って、これまでの「物語の要約」に、新しい「会話ログ」の内容を追記・統合し、更新された物語の要約を作成してください。
@@ -217,6 +218,13 @@ const SUMMARIZATION_PROMPT_MD_CONTENT = `# 指示
 ### 提示された謎・伏線
 - 
 `;
+// --- ▲▲▲ ここまで定義を追加 ▲▲▲ ---
+
+
+const DEFAULT_CHARACTERS = [
+    { fullName: 'クリス アンダー', content: CHRIS_UNDER_MD_CONTENT },
+    { fullName: '成瀬 真衣', content: NARUSE_MAI_MD_CONTENT },
+];
 
 const GITIGNORE_CONTENT = `
 # VS Code
@@ -298,15 +306,19 @@ export async function initializeProject() {
                 { filePath: path.join('scenario', '01_player_character.md'), content: PLAYER_CHARACTER_MD_CONTENT },
                 { filePath: path.join('scenario', '02_ai_rules.md', ), content: AI_RULES_MD_CONTENT },
                 { filePath: path.join('scenario', '03_opening_scene.md'), content: OPENING_SCENE_MD_CONTENT },
-                { filePath: path.join('scenario', 'characters', 'chris_under.md'), content: CHRIS_UNDER_MD_CONTENT },
-                { filePath: path.join('scenario', 'characters', 'naruse_mai.md'), content: NARUSE_MAI_MD_CONTENT },
                 { filePath: path.join('scenario', 'prompts', 'summarization_prompt.md'), content: SUMMARIZATION_PROMPT_MD_CONTENT },
                 { filePath: path.join('scenario', 'prompts', 'character_update_prompt.md'), content: CHARACTER_UPDATE_PROMPT_MD_CONTENT },
                 { filePath: path.join('scenario', 'prompts', 'character_generation_prompt.md'), content: CHARACTER_GENERATION_PROMPT_MD_CONTENT },
-                // --- ▼▼▼ ここから修正 ▼▼▼ ---
                 { filePath: path.join('scenario', 'prompts', 'log_digest_prompt.md'), content: LOG_DIGEST_PROMPT_MD_CONTENT },
-                // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             ];
+
+            for (const char of DEFAULT_CHARACTERS) {
+                const fileName = `${toSlug(char.fullName)}.md`;
+                filesToCreate.push({
+                    filePath: path.join('scenario', 'characters', fileName),
+                    content: char.content,
+                });
+            }
             
             const encoder = new TextEncoder();
             for (const file of filesToCreate) {
