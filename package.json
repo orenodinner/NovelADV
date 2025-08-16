@@ -2,7 +2,7 @@
   "name": "NovelADV",
   "displayName": "Interactive Novel Game Engine",
   "description": "An extension to play interactive Novel games with LLMs.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "orenodinner",
   "license": "AGPL-3.0", 
   "repository": { 
