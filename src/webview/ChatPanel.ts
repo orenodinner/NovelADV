@@ -30,6 +30,7 @@ export class ChatPanel {
        
         if (ChatPanel.currentPanel) {
             ChatPanel.currentPanel._panel.reveal(column);
+            // 既存パネル表示時は、自動ロードせず現在の状態を復元
             ChatPanel.currentPanel.restoreHistory();
             return;
         }
@@ -57,7 +58,6 @@ export class ChatPanel {
     private restoreHistory() {
         const history = this.sessionManager.getHistory();
         if (history) {
-            // load-historyはUIを完全にクリアしてから履歴を再描画する
             this._panel.webview.postMessage({ command: 'load-history', history: history });
         }
     }
@@ -95,15 +95,12 @@ export class ChatPanel {
     private async _executeUndo(showPopup: boolean = false) {
         const result = await this.sessionManager.undoLastTurn();
         if (result.success) {
-            // UIをセッション履歴と完全に同期させる
             this.restoreHistory();
-            // 結果をシステムメッセージとしてUIに表示
             this._panel.webview.postMessage({ command: 'assistant-message', text: `[SYSTEM] ${result.message}` });
             if (showPopup) {
                 vscode.window.showInformationMessage(result.message);
             }
         } else {
-            // UIには何も変更せず、エラーメッセージのみ表示
             this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM] ${result.message}` });
             if (showPopup) {
                 vscode.window.showWarningMessage(result.message);
@@ -114,9 +111,17 @@ export class ChatPanel {
     private async _handleWebviewMessage(message: any) {
         switch (message.command) {
             case 'webview-ready':
+                // セッションがまだアクティブでない場合のみ自動ロードを試みる
                 if (this.sessionManager.getHistory().length === 0) {
-                    await this.startGame();
+                    const loadedHistory = await this.sessionManager.loadLatestSession();
+                    if (loadedHistory) {
+                        this.restoreHistory();
+                    } else {
+                        // ロードできるセーブデータがなければ新規ゲーム開始
+                        await this.startGame();
+                    }
                 } else {
+                    // 既にセッションがアクティブなら、そのまま履歴を復元
                     this.restoreHistory();
                 }
                 return;
@@ -133,7 +138,6 @@ export class ChatPanel {
                 await this.setupApiKey();
                 return;
             case 'undo-last-turn':
-                // ボタンからの実行時はポップアップも表示
                 await this._executeUndo(true);
                 return;
         }
@@ -190,7 +194,6 @@ export class ChatPanel {
                 break;
 
             case 'undo':
-                // チャットからの実行時はポップアップ不要
                 await this._executeUndo(false);
                 break;
                 

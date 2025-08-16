@@ -46,6 +46,7 @@ export class SessionManager implements vscode.Disposable {
     }
 
     private async loadProjectSettings(): Promise<void> {
+        // (このメソッドに変更はありません)
         try {
             const projectRoot = await getProjectRoot();
             const settingFileUri = vscode.Uri.joinPath(projectRoot, '.storygamesetting.json');
@@ -74,6 +75,7 @@ export class SessionManager implements vscode.Disposable {
     }
     
     private async updateLatestSummaryFile(): Promise<void> {
+        // (このメソッドに変更はありません)
         try {
             const projectRoot = await getProjectRoot();
             const summaryFileUri = vscode.Uri.joinPath(projectRoot, 'summaries', 'latest_summary.json');
@@ -88,24 +90,22 @@ export class SessionManager implements vscode.Disposable {
     }
 
     private async prepareNewSessionFiles(): Promise<void> {
+        // (このメソッドに変更はありません)
         try {
             const projectRoot = await getProjectRoot();
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
-            // 1. オートセーブ用JSONファイルの準備
             const autoSavesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'autosaves');
             await ensureDirectoryExists(autoSavesDirUri);
             const sessionFileName = `session_${timestamp}.json`;
             this.currentSessionFileUri = vscode.Uri.joinPath(autoSavesDirUri, sessionFileName);
             await this.updateCurrentSessionFile();
 
-            // 2. トランスクリプト用Markdownファイルの準備
             const transcriptsDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'transcripts');
             await ensureDirectoryExists(transcriptsDirUri);
             const transcriptFileName = `transcript_${timestamp}.md`;
             this.transcriptFileUri = vscode.Uri.joinPath(transcriptsDirUri, transcriptFileName);
 
-            // ファイルにヘッダーを書き込む
             const header = `# Story Transcript\n\n- **Session Started:** ${new Date().toLocaleString()}\n- **Project:** ${path.basename(projectRoot.fsPath)}\n\n---\n\n`;
             await writeFileContent(this.transcriptFileUri, header);
 
@@ -116,12 +116,8 @@ export class SessionManager implements vscode.Disposable {
         }
     }
     
-    /**
-     * トランスクリプトファイルにメッセージを追記する
-     * @param role メッセージの役割
-     * @param content メッセージの内容
-     */
     private async appendToTranscript(role: 'user' | 'assistant' | 'system', content: string): Promise<void> {
+        // (このメソッドに変更はありません)
         if (!this.transcriptFileUri) return;
 
         try {
@@ -144,6 +140,7 @@ export class SessionManager implements vscode.Disposable {
     }
 
     public async archiveCurrentSession(prefix: string = 'archive_'): Promise<void> {
+        // (このメソッドに変更はありません)
         if (!this.currentSessionFileUri) return;
 
         try {
@@ -168,6 +165,7 @@ export class SessionManager implements vscode.Disposable {
     }
 
     public async startNewSession(): Promise<string> {
+        // (このメソッドに変更はありません)
         if (this.history.length > 0) {
             const lastMessage = this.history[this.history.length - 1];
             return lastMessage ? lastMessage.content : "セッションを再開します。";
@@ -189,15 +187,15 @@ export class SessionManager implements vscode.Disposable {
     }
 
     public async addMessage(role: 'user' | 'assistant', content: string): Promise<void> {
+        // (このメソッドに変更はありません)
         this.history.push({ role, content });
         await this.updateCurrentSessionFile();
         await this.appendToTranscript(role, content);
-
-        // ユーザーとアシスタントの両方のメッセージが追加された後にチェック
         await this.triggerSummarizationIfNeeded();
     }
     
     private async triggerSummarizationIfNeeded(): Promise<void> {
+        // (このメソッドに変更はありません)
         if (this.isSummarizing || this.history.length < this.summarizationTriggerMessages) {
             return;
         }
@@ -244,6 +242,7 @@ export class SessionManager implements vscode.Disposable {
     }
     
     private async updateCurrentSessionFile(): Promise<void> {
+        // (このメソッドに変更はありません)
         if (!this.currentSessionFileUri) {
              if (this.history.length > 0) await this.prepareNewSessionFiles();
              return;
@@ -266,6 +265,7 @@ export class SessionManager implements vscode.Disposable {
     }
 
     public getHistoryForLLM(): ChatMessage[] {
+        // (このメソッドに変更はありません)
         if (!this.systemPrompt) {
             throw new Error("Session has not been started. Call startNewSession() first.");
         }
@@ -288,6 +288,7 @@ ${this.summary || "物語は始まったばかりです。"}
     }
     
     public async saveSession(): Promise<void> {
+        // (このメソッドに変更はありません)
         if (this.history.length === 0 && this.summary === '') {
             vscode.window.showInformationMessage("No conversation to save.");
             return;
@@ -296,6 +297,85 @@ ${this.summary || "物語は始まったばかりです。"}
         vscode.window.showInformationMessage(`Current session saved to 'logs/archives'.`);
     }
 
+    /**
+     * 【新規】指定されたURIのファイルからセッションを読み込む内部メソッド
+     */
+    private async _loadSessionFromFile(fileUri: vscode.Uri): Promise<ChatMessage[]> {
+        const content = await readFileContent(fileUri);
+        const loadedData: SessionData = JSON.parse(content);
+
+        if (loadedData.systemPrompt && loadedData.history) {
+            await this.loadProjectSettings();
+            
+            this.systemPrompt = loadedData.systemPrompt;
+            this.history = loadedData.history;
+            this.summary = loadedData.summary || '';
+
+            await this.prepareNewSessionFiles(); // ロード後に新しいオートセーブファイルを作成
+            await this.updateCurrentSessionFile();
+            await this.updateLatestSummaryFile();
+            
+            console.log(`Session loaded from ${path.basename(fileUri.fsPath)}`);
+            return this.history;
+        } else {
+            throw new Error("Invalid or old session file format.");
+        }
+    }
+
+    /**
+     * 【新規】手動・自動セーブから最新のファイルを探す
+     */
+    private async findLatestSaveFileUri(): Promise<vscode.Uri | null> {
+        const projectRoot = await getProjectRoot();
+        const archivesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'archives');
+        const autosavesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'autosaves');
+        
+        let allSaveFiles: { uri: vscode.Uri, name: string }[] = [];
+
+        for (const dirUri of [archivesDirUri, autosavesDirUri]) {
+            try {
+                await ensureDirectoryExists(dirUri);
+                const files = await vscode.workspace.fs.readDirectory(dirUri);
+                const jsonFiles = files
+                    .filter(([name, type]) => type === vscode.FileType.File && name.endsWith('.json'))
+                    .map(([name, _]) => ({ uri: vscode.Uri.joinPath(dirUri, name), name }));
+                allSaveFiles.push(...jsonFiles);
+            } catch (error) {
+                console.warn(`Could not read directory ${dirUri.fsPath}`, error);
+            }
+        }
+
+        if (allSaveFiles.length === 0) {
+            return null;
+        }
+
+        // ファイル名（タイムスタンプ順）でソートして最新のものを取得
+        allSaveFiles.sort((a, b) => b.name.localeCompare(a.name));
+        
+        return allSaveFiles[0].uri;
+    }
+
+    /**
+     * 【新規】最新のセーブデータを自動で読み込む
+     */
+    public async loadLatestSession(): Promise<ChatMessage[] | null> {
+        try {
+            const latestFileUri = await this.findLatestSaveFileUri();
+            if (latestFileUri) {
+                vscode.window.showInformationMessage(`Loading latest save: ${path.basename(latestFileUri.fsPath)}`);
+                await this.archiveCurrentSession('session_before_load_');
+                return await this._loadSessionFromFile(latestFileUri);
+            }
+            return null;
+        } catch (error: any) {
+            vscode.window.showErrorMessage(`Failed to auto-load latest session: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
+     * 【修正】手動でセッションを読み込む（内部で_loadSessionFromFileを使用）
+     */
     public async loadSession(): Promise<ChatMessage[] | null> {
         const projectRoot = await getProjectRoot();
         const archivesDirUri = vscode.Uri.joinPath(projectRoot, 'logs', 'archives');
@@ -322,25 +402,10 @@ ${this.summary || "物語は始まったばかりです。"}
             await this.archiveCurrentSession('session_before_load_');
 
             const fileUri = vscode.Uri.joinPath(archivesDirUri, selectedFile);
-            const content = await readFileContent(fileUri);
-            const loadedData: SessionData = JSON.parse(content);
+            const history = await this._loadSessionFromFile(fileUri);
+            vscode.window.showInformationMessage(`Session loaded from ${selectedFile}`);
+            return history;
 
-            if (loadedData.systemPrompt && loadedData.history) {
-                await this.loadProjectSettings();
-                
-                this.systemPrompt = loadedData.systemPrompt;
-                this.history = loadedData.history;
-                this.summary = loadedData.summary || '';
-
-                await this.prepareNewSessionFiles();
-                await this.updateCurrentSessionFile();
-                await this.updateLatestSummaryFile();
-                
-                vscode.window.showInformationMessage(`Session loaded from ${selectedFile}`);
-                return this.history;
-            } else {
-                throw new Error("Invalid or old session file format.");
-            }
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to load session: ${error.message}`);
             return null;
@@ -348,6 +413,7 @@ ${this.summary || "物語は始まったばかりです。"}
     }
 
     public async undoLastTurn(): Promise<{ success: boolean; message: string }> {
+        // (このメソッドに変更はありません)
         if (this.history.length < 2) {
             return { success: false, message: "Cannot undo. Not enough history." };
         }
@@ -355,10 +421,9 @@ ${this.summary || "物語は始まったばかりです。"}
         const lastMessage = this.history[this.history.length - 1];
         const secondLastMessage = this.history[this.history.length - 2];
 
-        // 直近のペアが [user, assistant] であることを確認
         if (lastMessage.role === 'assistant' && secondLastMessage.role === 'user') {
-            this.history.pop(); // assistantの応答を削除
-            this.history.pop(); // userの入力を削除
+            this.history.pop();
+            this.history.pop();
 
             await this.updateCurrentSessionFile();
             await this.appendToTranscript('system', '[UNDO] The last user message and AI response have been removed.');
