@@ -3,7 +3,14 @@
   "displayName": "Interactive Novel Game Engine",
   "description": "An extension to play interactive Novel games with LLMs.",
   "version": "0.2.0",
-  "publisher": "your-publisher-name",
+  "publisher": "orenodinner",
+  "license": "AGPL-3.0", 
+  "repository": { 
+    "type": "git",
+    "url": "https://github.com/orenodinner/NovelADV.git"
+  },
+
+
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -23,27 +30,27 @@
     "commands": [
       {
         "command": "interactive-story.initializeProject",
-        "title": "Novel_Init: Initialize New Scenario Project",
+        "title": "New Novel (Initialize New Scenario Project)",
         "category": "NovelADV"
       },
       {
         "command": "interactive-story.forkProject",
-        "title": "Novel_Fork: Fork Scenario from Current Project",
+        "title": "Fork (Fork Scenario from Current Project)",
         "category": "NovelADV"
       },
       {
         "command": "interactive-story.openChat",
-        "title": "Novel_Start: Open Chat",
+        "title": "Start (Open Chat)",
         "category": "NovelADV"
       },
       {
         "command": "interactive-story.exportLogToMarkdown",
-        "title": "Novel_Start: Export Log to Markdown",
+        "title": "Export Log to Markdown",
         "category": "NovelADV"
       },
       {
         "command": "interactive-story.undoLastTurn",
-        "title": "Novel_Start: Undo Last Turn",
+        "title": "Undo",
         "category": "NovelADV"
       }
     ],
