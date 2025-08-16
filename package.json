@@ -16,6 +16,7 @@
     "onCommand:interactive-story.openChat",
     "onCommand:interactive-story.exportLogToMarkdown",
     "onCommand:interactive-story.forkProject",
+    "onCommand:interactive-story.undoLastTurn",
     "onWebviewPanel:interactive-story.chatView"
   ],
   "contributes": {
@@ -38,6 +39,11 @@
       {
         "command": "interactive-story.exportLogToMarkdown",
         "title": "Story Game: Export Log to Markdown",
+        "category": "Interactive Story"
+      },
+      {
+        "command": "interactive-story.undoLastTurn",
+        "title": "Story Game: Undo Last Turn",
         "category": "Interactive Story"
       }
     ],

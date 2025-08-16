@@ -7,7 +7,7 @@ import { getNonce } from './getNonce';
 import { ChatMessage } from '../types';
 import { SessionManager } from '../services/SessionManager';
 import { CharacterGeneratorService } from '../services/CharacterGeneratorService';
-import { ConfigService } from '../services/ConfigService'; // ConfigServiceをインポート
+import { ConfigService } from '../services/ConfigService';
 
 export class ChatPanel {
     public static currentPanel: ChatPanel | undefined;
@@ -19,7 +19,7 @@ export class ChatPanel {
     private _disposables: vscode.Disposable[] = [];
     private sessionManager: SessionManager;
     private characterGenerator: CharacterGeneratorService;
-    private configService: ConfigService; // ConfigServiceのインスタンスを保持
+    private configService: ConfigService;
 
 
     public static createOrShow(extensionUri: vscode.Uri) {
@@ -47,10 +47,17 @@ export class ChatPanel {
 
         ChatPanel.currentPanel = new ChatPanel(panel, extensionUri);
     }
+
+    public static updateChatPanel() {
+        if (ChatPanel.currentPanel) {
+            ChatPanel.currentPanel.restoreHistory();
+        }
+    }
     
     private restoreHistory() {
         const history = this.sessionManager.getHistory();
-        if (history && history.length > 0) {
+        if (history) {
+            // load-historyはUIを完全にクリアしてから履歴を再描画する
             this._panel.webview.postMessage({ command: 'load-history', history: history });
         }
     }
@@ -61,7 +68,7 @@ export class ChatPanel {
         this._extensionUri = extensionUri;
         this.sessionManager = SessionManager.getInstance();
         this.characterGenerator = CharacterGeneratorService.getInstance();
-        this.configService = ConfigService.getInstance(); // インスタンスを取得
+        this.configService = ConfigService.getInstance();
 
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         
@@ -81,6 +88,25 @@ export class ChatPanel {
             const x = this._disposables.pop();
             if (x) {
                 x.dispose();
+            }
+        }
+    }
+
+    private async _executeUndo(showPopup: boolean = false) {
+        const result = await this.sessionManager.undoLastTurn();
+        if (result.success) {
+            // UIをセッション履歴と完全に同期させる
+            this.restoreHistory();
+            // 結果をシステムメッセージとしてUIに表示
+            this._panel.webview.postMessage({ command: 'assistant-message', text: `[SYSTEM] ${result.message}` });
+            if (showPopup) {
+                vscode.window.showInformationMessage(result.message);
+            }
+        } else {
+            // UIには何も変更せず、エラーメッセージのみ表示
+            this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM] ${result.message}` });
+            if (showPopup) {
+                vscode.window.showWarningMessage(result.message);
             }
         }
     }
@@ -106,6 +132,10 @@ export class ChatPanel {
             case 'setup-api-key':
                 await this.setupApiKey();
                 return;
+            case 'undo-last-turn':
+                // ボタンからの実行時はポップアップも表示
+                await this._executeUndo(true);
+                return;
         }
     }
 
@@ -128,38 +158,47 @@ export class ChatPanel {
     private async handleCommand(text: string) {
         const commandText = text.substring(1).trim();
         const parts = commandText.split(/\s+/);
-        const commandName = parts[0];
+        const commandName = parts[0].toLowerCase();
         const args = parts.slice(1);
 
-        if (commandName === 'chara_add') {
-            if (args.length === 0) {
-                const helpMessage = `[SYSTEM] Invalid command format. Use: !chara_add Full Name`;
-                this._panel.webview.postMessage({ command: 'error-message', text: helpMessage });
-                return;
-            }
-
-            const fullName = args.join(' ');
-            const searchKeys = [fullName, ...args];
-
-            vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: `Generating character sheet for "${fullName}"...`,
-                cancellable: false
-            }, async (progress) => {
-                try {
-                    progress.report({ message: 'Analyzing logs...' });
-                    const resultMessage = await this.characterGenerator.generateCharacter(fullName, searchKeys);
-                    vscode.window.showInformationMessage(resultMessage);
-                    this._panel.webview.postMessage({ command: 'assistant-message', text: `[SYSTEM] ${resultMessage}` });
-                } catch (error: any) {
-                    vscode.window.showErrorMessage(error.message);
-                    this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM ERROR] ${error.message}` });
+        switch (commandName) {
+            case 'chara_add':
+                if (args.length === 0) {
+                    const helpMessage = `[SYSTEM] Invalid command format. Use: !chara_add Full Name`;
+                    this._panel.webview.postMessage({ command: 'error-message', text: helpMessage });
+                    return;
                 }
-            });
-        } else {
-            const errorMessage = `Unknown command: ${commandName}`;
-            vscode.window.showWarningMessage(errorMessage);
-            this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM] ${errorMessage}` });
+
+                const fullName = args.join(' ');
+                const searchKeys = [fullName, ...args];
+
+                vscode.window.withProgress({
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Generating character sheet for "${fullName}"...`,
+                    cancellable: false
+                }, async (progress) => {
+                    try {
+                        progress.report({ message: 'Analyzing logs...' });
+                        const resultMessage = await this.characterGenerator.generateCharacter(fullName, searchKeys);
+                        vscode.window.showInformationMessage(resultMessage);
+                        this._panel.webview.postMessage({ command: 'assistant-message', text: `[SYSTEM] ${resultMessage}` });
+                    } catch (error: any) {
+                        vscode.window.showErrorMessage(error.message);
+                        this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM ERROR] ${error.message}` });
+                    }
+                });
+                break;
+
+            case 'undo':
+                // チャットからの実行時はポップアップ不要
+                await this._executeUndo(false);
+                break;
+                
+            default:
+                const errorMessage = `Unknown command: ${commandName}`;
+                vscode.window.showWarningMessage(errorMessage);
+                this._panel.webview.postMessage({ command: 'error-message', text: `[SYSTEM] ${errorMessage}` });
+                break;
         }
     }
 
@@ -176,13 +215,11 @@ export class ChatPanel {
             
             const messages = this.sessionManager.getHistoryForLLM();
             
-            // チャット用の設定を取得
             const chatConfig = this.configService.get().chat;
 
             const provider = new OpenRouterProvider();
             const result = await provider.chat({
                 messages,
-                // チャット用の設定でAPIを呼び出す
                 overrideConfig: chatConfig,
                 onStream: (chunk) => {
                     this._panel.webview.postMessage({ command: 'llm-response-chunk', chunk });
@@ -206,7 +243,7 @@ export class ChatPanel {
     }
 
     private async setupApiKey() {
-        const provider = this.configService.get().chat.provider; // 現在のチャットプロバイダを取得
+        const provider = this.configService.get().chat.provider;
         const apiKey = await vscode.window.showInputBox({
             prompt: `Enter your ${provider} API Key`,
             password: true,
@@ -250,6 +287,7 @@ export class ChatPanel {
                     <div id="button-bar">
                          <button id="save-button">セーブ</button>
                          <button id="load-button">ロード</button>
+                         <button id="undo-button">Undo</button>
                     </div>
                 </div>
 

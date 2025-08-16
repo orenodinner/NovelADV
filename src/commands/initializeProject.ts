@@ -22,8 +22,8 @@ const STORYGAMESETTING_JSON_CONTENT = `{
   },
 
   "context": {
-    "shortTermMemoryMessages": 3,
-    "summarizationTriggerMessages": 6
+    "shortTermMemoryMessages": 10,
+    "summarizationTriggerMessages": 20
   }
 }
 `;

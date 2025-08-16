@@ -121,20 +121,21 @@ export class SessionManager implements vscode.Disposable {
      * @param role メッセージの役割
      * @param content メッセージの内容
      */
-    private async appendToTranscript(role: 'user' | 'assistant', content: string): Promise<void> {
+    private async appendToTranscript(role: 'user' | 'assistant' | 'system', content: string): Promise<void> {
         if (!this.transcriptFileUri) return;
 
         try {
             let formattedMessage: string;
             if (role === 'user') {
                 formattedMessage = `**You:**\n${content}\n\n`;
-            } else {
-                // アシスタントの最初のメッセージ（オープニング）は特別扱い
+            } else if (role === 'assistant') {
                 if (this.history.length === 1) {
                      formattedMessage = `**Opening Scene:**\n${content}\n\n---\n\n`;
                 } else {
                      formattedMessage = `${content}\n\n---\n\n`;
                 }
+            } else { // system
+                formattedMessage = `*[SYSTEM: ${new Date().toLocaleTimeString()}]*\n*${content}*\n\n---\n\n`;
             }
             await appendFileContent(this.transcriptFileUri, formattedMessage);
         } catch (error) {
@@ -343,6 +344,29 @@ ${this.summary || "物語は始まったばかりです。"}
         } catch (error: any) {
             vscode.window.showErrorMessage(`Failed to load session: ${error.message}`);
             return null;
+        }
+    }
+
+    public async undoLastTurn(): Promise<{ success: boolean; message: string }> {
+        if (this.history.length < 2) {
+            return { success: false, message: "Cannot undo. Not enough history." };
+        }
+
+        const lastMessage = this.history[this.history.length - 1];
+        const secondLastMessage = this.history[this.history.length - 2];
+
+        // 直近のペアが [user, assistant] であることを確認
+        if (lastMessage.role === 'assistant' && secondLastMessage.role === 'user') {
+            this.history.pop(); // assistantの応答を削除
+            this.history.pop(); // userの入力を削除
+
+            await this.updateCurrentSessionFile();
+            await this.appendToTranscript('system', '[UNDO] The last user message and AI response have been removed.');
+            
+            console.log("Last turn undone. History count:", this.history.length);
+            return { success: true, message: "Last turn has been undone." };
+        } else {
+            return { success: false, message: "Cannot undo. The last action was not a complete user-AI turn." };
         }
     }
 }

@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { initializeProject } from './commands/initializeProject';
 import { exportLogToMarkdown } from './commands/exportLogToMarkdown';
-import { forkProject } from './commands/forkProject'; // 新規インポート
+import { forkProject } from './commands/forkProject';
 import { ChatPanel } from './webview/ChatPanel';
 import { ConfigService } from './services/ConfigService';
 import { KeytarService } from './services/KeytarService';
@@ -31,11 +31,9 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('interactive-story.initializeProject', initializeProject)
     );
 
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.forkProject', forkProject)
     );
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.openChat', () => {
@@ -45,6 +43,21 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('interactive-story.exportLogToMarkdown', exportLogToMarkdown)
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('interactive-story.undoLastTurn', async () => {
+            const result = await sessionManager.undoLastTurn();
+            if (result.success) {
+                vscode.window.showInformationMessage(result.message);
+                // アクティブなチャットパネルがあれば、UIを更新する
+                if (ChatPanel.currentPanel) {
+                    ChatPanel.updateChatPanel();
+                }
+            } else {
+                vscode.window.showWarningMessage(result.message);
+            }
+        })
     );
 }
 

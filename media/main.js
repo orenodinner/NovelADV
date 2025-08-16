@@ -8,6 +8,7 @@
     const sendButton = document.getElementById('send-button');
     const saveButton = document.getElementById('save-button');
     const loadButton = document.getElementById('load-button');
+    const undoButton = document.getElementById('undo-button');
     
     let thinkingIndicator = null;
 
@@ -76,6 +77,7 @@
     sendButton.addEventListener('click', sendMessage);
     saveButton.addEventListener('click', () => vscode.postMessage({ command: 'save-game' }));
     loadButton.addEventListener('click', () => vscode.postMessage({ command: 'load-game' }));
+    undoButton.addEventListener('click', () => vscode.postMessage({ command: 'undo-last-turn' }));
 
     messageInput.addEventListener('keydown', (e) => {
         // Ctrl+Enter or Cmd+Enterで送信
@@ -136,6 +138,7 @@
                 });
                 sendButton.disabled = false;
                 break;
+            // 'undo-success' caseは不要になったので削除
         }
     });
 
