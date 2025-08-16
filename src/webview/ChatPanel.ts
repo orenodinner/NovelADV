@@ -7,6 +7,7 @@ import { getNonce } from './getNonce';
 import { ChatMessage } from '../types';
 import { SessionManager } from '../services/SessionManager';
 import { CharacterGeneratorService } from '../services/CharacterGeneratorService';
+import { ConfigService } from '../services/ConfigService'; // ConfigServiceをインポート
 
 export class ChatPanel {
     public static currentPanel: ChatPanel | undefined;
@@ -18,6 +19,7 @@ export class ChatPanel {
     private _disposables: vscode.Disposable[] = [];
     private sessionManager: SessionManager;
     private characterGenerator: CharacterGeneratorService;
+    private configService: ConfigService; // ConfigServiceのインスタンスを保持
 
 
     public static createOrShow(extensionUri: vscode.Uri) {
@@ -59,6 +61,7 @@ export class ChatPanel {
         this._extensionUri = extensionUri;
         this.sessionManager = SessionManager.getInstance();
         this.characterGenerator = CharacterGeneratorService.getInstance();
+        this.configService = ConfigService.getInstance(); // インスタンスを取得
 
         this._panel.webview.html = this._getHtmlForWebview(this._panel.webview);
         
@@ -122,7 +125,6 @@ export class ChatPanel {
         }
     }
 
-    // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
     private async handleCommand(text: string) {
         const commandText = text.substring(1).trim();
         const parts = commandText.split(/\s+/);
@@ -136,10 +138,7 @@ export class ChatPanel {
                 return;
             }
 
-            // 引数を結合してフルネームを作成
             const fullName = args.join(' ');
-
-            // フルネームと、それを分割した各部分を検索キーとして自動生成
             const searchKeys = [fullName, ...args];
 
             vscode.window.withProgress({
@@ -177,9 +176,14 @@ export class ChatPanel {
             
             const messages = this.sessionManager.getHistoryForLLM();
             
+            // チャット用の設定を取得
+            const chatConfig = this.configService.get().chat;
+
             const provider = new OpenRouterProvider();
             const result = await provider.chat({
                 messages,
+                // チャット用の設定でAPIを呼び出す
+                overrideConfig: chatConfig,
                 onStream: (chunk) => {
                     this._panel.webview.postMessage({ command: 'llm-response-chunk', chunk });
                 },
@@ -200,11 +204,11 @@ export class ChatPanel {
             }
         }
     }
-    // --- ▲▲▲ ここまでメソッド修正 ▲▲▲ ---
 
     private async setupApiKey() {
+        const provider = this.configService.get().chat.provider; // 現在のチャットプロバイダを取得
         const apiKey = await vscode.window.showInputBox({
-            prompt: 'Enter your OpenRouter API Key',
+            prompt: `Enter your ${provider} API Key`,
             password: true,
             ignoreFocusOut: true,
         });
@@ -212,8 +216,8 @@ export class ChatPanel {
         if (apiKey) {
             try {
                 const keytarService = KeytarService.getInstance();
-                await keytarService.setApiKey('openrouter', apiKey);
-                vscode.window.showInformationMessage('OpenRouter API Key saved successfully. You can now send your message again.');
+                await keytarService.setApiKey(provider, apiKey);
+                vscode.window.showInformationMessage(`${provider} API Key saved successfully. You can now send your message again.`);
                 this._panel.webview.postMessage({ command: 'api-key-set-success' });
             } catch (error) {
                 vscode.window.showErrorMessage('Failed to save API key.');

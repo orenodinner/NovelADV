@@ -8,8 +8,19 @@ import { toSlug } from '../utils/workspaceUtils';
 
 const STORYGAMESETTING_JSON_CONTENT = `{
   "$schema": "https://example.com/storygamesetting.schema.json",
-  "llmProvider": "openrouter",
-  "llmModel": "anthropic/claude-3.5-sonnet",
+  
+  "chat": {
+    "llmProvider": "openrouter",
+    "llmModel": "qwen/qwen3-235b-a22b-2507",
+    "temperature": 0.8
+  },
+
+  "summarization": {
+    "llmProvider": "openrouter",
+    "llmModel": "qwen/qwen3-30b-a3b-instruct-2507",
+    "temperature": 0.2
+  },
+
   "context": {
     "shortTermMemoryMessages": 3,
     "summarizationTriggerMessages": 6

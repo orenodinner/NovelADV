@@ -2,7 +2,7 @@
 
 import axios, { AxiosError } from 'axios';
 import { Readable } from 'stream';
-import { ChatProvider, ChatCompletionOptions, ChatCompletionResult } from '../types';
+import { ChatProvider, ChatCompletionOptions, ChatCompletionResult, LlmConfig } from '../types';
 import { ConfigService } from '../services/ConfigService';
 import { KeytarService } from '../services/KeytarService';
 
@@ -18,38 +18,49 @@ export class OpenRouterProvider implements ChatProvider {
     }
 
     async chat(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
-        const config = this.configService.get();
-        const apiKey = await this.keytarService.getApiKey('openrouter');
+        // デフォルト設定として 'chat' 用の設定を取得
+        const defaultConfig = this.configService.get().chat;
+        
+        // オプションで渡された設定でデフォルトを上書きする
+        const finalConfig: LlmConfig = {
+            ...defaultConfig,
+            ...(options.overrideConfig || {}),
+            providerOptions: {
+                openrouter: {
+                    ...defaultConfig.providerOptions.openrouter,
+                    ...(options.overrideConfig?.providerOptions?.openrouter || {})
+                }
+            }
+        };
 
-        // --- ▼▼▼ ここから修正 ▼▼▼ ---
-        // APIキーがnull、または空文字列の場合にエラーをスローする
+        const apiKey = await this.keytarService.getApiKey(finalConfig.provider);
+
         if (!apiKey || apiKey.trim() === '') {
-            throw new Error('API key is not set. Please set it to continue.');
+            throw new Error(`API key for ${finalConfig.provider} is not set. Please set it to continue.`);
         }
-        // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
         const headers: Record<string, string> = {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json',
         };
 
-        if (config.providerOptions.openrouter.httpReferer) {
-            headers['HTTP-Referer'] = config.providerOptions.openrouter.httpReferer;
+        if (finalConfig.providerOptions.openrouter.httpReferer) {
+            headers['HTTP-Referer'] = finalConfig.providerOptions.openrouter.httpReferer;
         }
-        if (config.providerOptions.openrouter.xTitle) {
-            headers['X-Title'] = config.providerOptions.openrouter.xTitle;
+        if (finalConfig.providerOptions.openrouter.xTitle) {
+            headers['X-Title'] = finalConfig.providerOptions.openrouter.xTitle;
         }
 
         const body = {
-            model: config.model,
+            model: finalConfig.model,
             messages: options.messages,
-            temperature: options.temperature ?? config.temperature,
-            max_tokens: options.maxTokens ?? config.maxTokens,
+            temperature: finalConfig.temperature,
+            max_tokens: finalConfig.maxTokens,
             stream: typeof options.onStream === 'function',
         };
 
         try {
-            const response = await axios.post(config.endpoint, body, {
+            const response = await axios.post(finalConfig.endpoint, body, {
                 headers: headers,
                 responseType: body.stream ? 'stream' : 'json',
                 signal: options.abortSignal,
@@ -66,18 +77,15 @@ export class OpenRouterProvider implements ChatProvider {
             }
 
         } catch (error) {
-            // --- ▼▼▼ ここから修正 ▼▼▼ ---
             if (error instanceof AxiosError) {
-                // 401 Unauthorized エラーの場合は、キーが不正である可能性が高い
                 if (error.response?.status === 401) {
-                    throw new Error('API key is not set or invalid (401 Unauthorized). Please set it.');
+                    throw new Error(`API key for ${finalConfig.provider} is not set or invalid (401 Unauthorized). Please set it.`);
                 }
                 const errorData = error.response?.data;
                 const errorMessage = errorData?.error?.message || error.message;
                 console.error('OpenRouter API Error:', errorData);
                 throw new Error(`OpenRouter API Error: ${errorMessage}`);
             }
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
             console.error('Unknown error during API call:', error);
             throw new Error('An unknown error occurred while communicating with OpenRouter.');
         }

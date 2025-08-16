@@ -5,6 +5,7 @@ import * as path from 'path';
 import { ChatMessage } from '../types';
 import { getProjectRoot, readFileContent, writeFileContent, readAllFilesAsString, toSlug } from '../utils/workspaceUtils';
 import { OpenRouterProvider } from '../providers/OpenRouterProvider';
+import { ConfigService } from './ConfigService'; // ConfigServiceをインポート
 
 const LOG_LENGTH_THRESHOLD_FOR_DIGEST = 15000;
 
@@ -13,9 +14,11 @@ export class CharacterGeneratorService {
     private generationPromptTemplate: string | null = null;
     private logDigestPromptTemplate: string | null = null;
     private provider: OpenRouterProvider;
+    private configService: ConfigService; // ConfigServiceのインスタンスを保持
 
     private constructor() {
         this.provider = new OpenRouterProvider();
+        this.configService = ConfigService.getInstance(); // インスタンスを取得
     }
 
     public static getInstance(): CharacterGeneratorService {
@@ -49,7 +52,6 @@ export class CharacterGeneratorService {
         }
     }
 
-    // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
     /**
      * 指定された複数の検索キーのいずれかを含むログのブロックを抽出する
      * @param fullLog - 物語の全ログ
@@ -72,7 +74,6 @@ export class CharacterGeneratorService {
 
         return relevantBlocks.join('\n---\n');
     }
-    // --- ▲▲▲ ここまでメソッド修正 ▲▲▲ ---
 
     private async createLogDigest(longLog: string, characterName: string): Promise<string> {
         console.log(`Log is too long (${longLog.length} chars). Creating a digest for "${characterName}"...`);
@@ -85,9 +86,16 @@ export class CharacterGeneratorService {
 
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
 
+        // 要約・メタタスク用の設定を取得
+        const summarizationConfig = this.configService.get().summarization;
+
         const result = await this.provider.chat({
             messages,
-            temperature: 0.0,
+            // ログの要約なので、要約用の設定を使用
+            overrideConfig: {
+                ...summarizationConfig,
+                temperature: 0.0,
+            }
         });
 
         if (!result.text) {
@@ -98,7 +106,6 @@ export class CharacterGeneratorService {
         return result.text.trim();
     }
 
-    // --- ▼▼▼ ここからメソッド修正 ▼▼▼ ---
     /**
      * 新しいキャラクターシートを生成してファイルに保存する
      * @param fullName - 作成するキャラクターのフルネーム
@@ -142,13 +149,20 @@ export class CharacterGeneratorService {
         
         const prompt = template
             .replace(/\{\{story_log\}\}/g, logForGeneration)
-            .replace(/\{\{character_name\}\}/g, fullName); // ここではフルネームを使用
+            .replace(/\{\{character_name\}\}/g, fullName);
 
         const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
 
+        // 要約・メタタスク用の設定を取得
+        const summarizationConfig = this.configService.get().summarization;
+
         const result = await this.provider.chat({
             messages,
-            temperature: 0.1,
+            // キャラクターシート生成もメタタスクなので、要約用の設定を使用
+            overrideConfig: {
+                ...summarizationConfig,
+                temperature: 0.1,
+            }
         });
 
         if (!result.text) {
@@ -159,5 +173,4 @@ export class CharacterGeneratorService {
 
         return `Successfully generated and saved character sheet for "${fullName}".`;
     }
-    // --- ▲▲▲ ここまでメソッド修正 ▲▲▲ ---
 }

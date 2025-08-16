@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import { StoryGameConfig, StoryGameConfigSchema } from '../types';
 
-export class ConfigService implements vscode.Disposable { // --- ▼▼▼ ここを修正 ▼▼▼ ---
+export class ConfigService implements vscode.Disposable {
     private static instance: ConfigService;
     private config: StoryGameConfig | null = null;
     private readonly disposables: vscode.Disposable[] = [];
@@ -19,7 +19,6 @@ export class ConfigService implements vscode.Disposable { // --- ▼▼▼ こ�
         this.disposables.push(disposable);
     }
 
-    // --- ▼▼▼ ここから追加 ▼▼▼ ---
     /**
      * インスタンスを破棄する
      */
@@ -27,7 +26,6 @@ export class ConfigService implements vscode.Disposable { // --- ▼▼▼ こ�
         this.disposables.forEach(d => d.dispose());
         ConfigService.instance = undefined!;
     }
-    // --- ▲▲▲ ここまで追加 ▲▲▲ ---
 
     public static getInstance(): ConfigService {
         if (!ConfigService.instance) {
@@ -42,18 +40,24 @@ export class ConfigService implements vscode.Disposable { // --- ▼▼▼ こ�
     private loadConfig(): void {
         const rawConfig = vscode.workspace.getConfiguration('interactive-story');
         
-        const configObject = {
-            provider: rawConfig.get('provider'),
-            model: rawConfig.get('model'),
-            endpoint: rawConfig.get('endpoint'),
-            temperature: rawConfig.get('temperature'),
-            maxTokens: rawConfig.get('maxTokens'),
+        // chatとsummarizationの各設定を読み込むヘルパー関数
+        const getLlmConfig = (path: 'chat' | 'summarization') => ({
+            provider: rawConfig.get(`${path}.provider`),
+            model: rawConfig.get(`${path}.model`),
+            endpoint: rawConfig.get(`${path}.endpoint`),
+            temperature: rawConfig.get(`${path}.temperature`),
+            maxTokens: rawConfig.get(`${path}.maxTokens`),
             providerOptions: {
                 openrouter: {
-                    httpReferer: rawConfig.get('providerOptions.openrouter.httpReferer'),
-                    xTitle: rawConfig.get('providerOptions.openrouter.xTitle'),
+                    httpReferer: rawConfig.get(`${path}.providerOptions.openrouter.httpReferer`),
+                    xTitle: rawConfig.get(`${path}.providerOptions.openrouter.xTitle`),
                 }
             },
+        });
+
+        const configObject = {
+            chat: getLlmConfig('chat'),
+            summarization: getLlmConfig('summarization'),
         };
 
         const result = StoryGameConfigSchema.safeParse(configObject);

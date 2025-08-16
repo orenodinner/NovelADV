@@ -5,14 +5,17 @@ import * as path from 'path';
 import { ChatMessage } from '../types';
 import { getProjectRoot, readFileContent } from '../utils/workspaceUtils';
 import { OpenRouterProvider } from '../providers/OpenRouterProvider';
+import { ConfigService } from './ConfigService'; // ConfigServiceをインポート
 
 export class SummarizerService {
     private static instance: SummarizerService;
     private summarizationPromptTemplate: string | null = null;
     private provider: OpenRouterProvider;
+    private configService: ConfigService; // ConfigServiceのインスタンスを保持
 
     private constructor() {
         this.provider = new OpenRouterProvider();
+        this.configService = ConfigService.getInstance(); // インスタンスを取得
     }
 
     public static getInstance(): SummarizerService {
@@ -68,18 +71,19 @@ export class SummarizerService {
             const template = await this.loadPromptTemplate();
             const newLogText = this.formatLogToText(newLogChunk);
 
-            // --- ▼▼▼ ここを修正 ▼▼▼ ---
-            // replaceAllの代わりに、正規表現と'g'フラグを使って全局置換を行う
             const prompt = template
                 .replace(/\{\{previous_summary\}\}/g, previousSummary || '（まだ要約はありません）')
                 .replace(/\{\{new_log\}\}/g, newLogText);
-            // --- ▲▲▲ ここまで修正 ▲▲▲ ---
 
             const messages: ChatMessage[] = [{ role: 'user', content: prompt }];
 
+            // 要約用の設定を取得
+            const summarizationConfig = this.configService.get().summarization;
+
             const result = await this.provider.chat({
                 messages: messages,
-                temperature: 0.2,
+                // 要約用の設定でAPIを呼び出す
+                overrideConfig: summarizationConfig,
             });
 
             if (!result.text) {

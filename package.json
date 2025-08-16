@@ -56,46 +56,101 @@
     "configuration": {
       "title": "Interactive Story Game Engine",
       "properties": {
-        "interactive-story.provider": {
+        "interactive-story.chat.provider": {
           "type": "string",
           "enum": [
             "openrouter",
             "openai"
           ],
           "default": "openrouter",
-          "description": "The LLM provider to use."
+          "description": "[Chat] The LLM provider to use for generating story dialogue.",
+          "order": 1
         },
-        "interactive-story.model": {
+        "interactive-story.chat.model": {
           "type": "string",
           "default": "anthropic/claude-3.5-sonnet",
-          "description": "The model identifier (e.g., 'anthropic/claude-3.5-sonnet', 'gpt-4o')."
+          "description": "[Chat] The model identifier for story generation (e.g., 'anthropic/claude-3.5-sonnet').",
+          "order": 2
         },
-        "interactive-story.endpoint": {
+        "interactive-story.chat.endpoint": {
           "type": "string",
           "default": "https://openrouter.ai/api/v1/chat/completions",
-          "description": "The API endpoint for chat completions."
+          "description": "[Chat] The API endpoint for chat completions.",
+          "order": 3
         },
-        "interactive-story.temperature": {
+        "interactive-story.chat.temperature": {
           "type": "number",
           "default": 0.8,
           "minimum": 0,
           "maximum": 2,
-          "description": "Controls randomness. Higher is more creative."
+          "description": "[Chat] Controls randomness for story generation. Higher is more creative.",
+          "order": 4
         },
-        "interactive-story.maxTokens": {
+        "interactive-story.chat.maxTokens": {
           "type": "integer",
           "default": 3000,
-          "description": "The maximum number of tokens to generate in a completion."
+          "description": "[Chat] The maximum number of tokens to generate in a chat completion.",
+          "order": 5
         },
-        "interactive-story.providerOptions.openrouter.httpReferer": {
+        "interactive-story.chat.providerOptions.openrouter.httpReferer": {
           "type": "string",
           "default": "",
-          "description": "(Optional) The HTTP-Referer header to send to OpenRouter."
+          "description": "[Chat] (Optional) The HTTP-Referer header to send to OpenRouter.",
+          "order": 6
         },
-        "interactive-story.providerOptions.openrouter.xTitle": {
+        "interactive-story.chat.providerOptions.openrouter.xTitle": {
           "type": "string",
           "default": "Interactive Story Game for VS Code",
-          "description": "(Optional) The X-Title header to send to OpenRouter for identifying your app."
+          "description": "[Chat] (Optional) The X-Title header to send to OpenRouter for identifying your app.",
+          "order": 7
+        },
+        "interactive-story.summarization.provider": {
+          "type": "string",
+          "enum": [
+            "openrouter",
+            "openai"
+          ],
+          "default": "openrouter",
+          "description": "[Summarization] The LLM provider for meta-tasks like summarizing and character updates.",
+          "order": 8
+        },
+        "interactive-story.summarization.model": {
+          "type": "string",
+          "default": "anthropic/claude-3.5-sonnet",
+          "description": "[Summarization] The model identifier for meta-tasks. A fast and capable model is recommended.",
+          "order": 9
+        },
+        "interactive-story.summarization.endpoint": {
+          "type": "string",
+          "default": "https://openrouter.ai/api/v1/chat/completions",
+          "description": "[Summarization] The API endpoint for meta-task completions.",
+          "order": 10
+        },
+        "interactive-story.summarization.temperature": {
+          "type": "number",
+          "default": 0.2,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "[Summarization] Controls randomness for meta-tasks. Lower is better for factual summaries.",
+          "order": 11
+        },
+        "interactive-story.summarization.maxTokens": {
+          "type": "integer",
+          "default": 2000,
+          "description": "[Summarization] The maximum number of tokens to generate for meta-tasks.",
+          "order": 12
+        },
+        "interactive-story.summarization.providerOptions.openrouter.httpReferer": {
+          "type": "string",
+          "default": "",
+          "description": "[Summarization] (Optional) The HTTP-Referer header for OpenRouter.",
+          "order": 13
+        },
+        "interactive-story.summarization.providerOptions.openrouter.xTitle": {
+          "type": "string",
+          "default": "Interactive Story Game for VS Code (Summarizer)",
+          "description": "[Summarization] (Optional) The X-Title header for OpenRouter.",
+          "order": 14
         }
       }
     }
