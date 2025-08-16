@@ -1,7 +1,7 @@
 {
-  "name": "novel-assistant-改",
-  "displayName": "Interactive Story Game Engine",
-  "description": "An extension to play interactive story games with LLMs.",
+  "name": "NovelADV",
+  "displayName": "Interactive Novel Game Engine",
+  "description": "An extension to play interactive Novel games with LLMs.",
   "version": "0.2.0",
   "publisher": "your-publisher-name",
   "engines": {
@@ -23,28 +23,28 @@
     "commands": [
       {
         "command": "interactive-story.initializeProject",
-        "title": "Story Game: Initialize New Scenario Project",
-        "category": "Interactive Story"
+        "title": "Novel_Init: Initialize New Scenario Project",
+        "category": "NovelADV"
       },
       {
         "command": "interactive-story.forkProject",
-        "title": "Story Game: Fork Scenario from Current Project",
-        "category": "Interactive Story"
+        "title": "Novel_Fork: Fork Scenario from Current Project",
+        "category": "NovelADV"
       },
       {
         "command": "interactive-story.openChat",
-        "title": "Story Game: Open Chat / Start Game",
-        "category": "Interactive Story"
+        "title": "Novel_Start: Open Chat",
+        "category": "NovelADV"
       },
       {
         "command": "interactive-story.exportLogToMarkdown",
-        "title": "Story Game: Export Log to Markdown",
-        "category": "Interactive Story"
+        "title": "Novel_Start: Export Log to Markdown",
+        "category": "NovelADV"
       },
       {
         "command": "interactive-story.undoLastTurn",
-        "title": "Story Game: Undo Last Turn",
-        "category": "Interactive Story"
+        "title": "Novel_Start: Undo Last Turn",
+        "category": "NovelADV"
       }
     ],
     "keybindings": [
@@ -60,7 +60,7 @@
       }
     },
     "configuration": {
-      "title": "Interactive Story Game Engine",
+      "title": "Interactive Novel Game Engine",
       "properties": {
         "interactive-story.chat.provider": {
           "type": "string",
@@ -74,8 +74,8 @@
         },
         "interactive-story.chat.model": {
           "type": "string",
-          "default": "anthropic/claude-3.5-sonnet",
-          "description": "[Chat] The model identifier for story generation (e.g., 'anthropic/claude-3.5-sonnet').",
+          "default": "qwen/qwen3-235b-a22b-2507",
+          "description": "[Chat] The model identifier for story generation (e.g., 'qwen/qwen3-235b-a22b-2507').",
           "order": 2
         },
         "interactive-story.chat.endpoint": {
@@ -106,7 +106,7 @@
         },
         "interactive-story.chat.providerOptions.openrouter.xTitle": {
           "type": "string",
-          "default": "Interactive Story Game for VS Code",
+          "default": "Interactive Novel Game for VS Code",
           "description": "[Chat] (Optional) The X-Title header to send to OpenRouter for identifying your app.",
           "order": 7
         },
@@ -122,7 +122,7 @@
         },
         "interactive-story.summarization.model": {
           "type": "string",
-          "default": "anthropic/claude-3.5-sonnet",
+          "default": "qwen/qwen3-235b-a22b-2507",
           "description": "[Summarization] The model identifier for meta-tasks. A fast and capable model is recommended.",
           "order": 9
         },
@@ -154,7 +154,7 @@
         },
         "interactive-story.summarization.providerOptions.openrouter.xTitle": {
           "type": "string",
-          "default": "Interactive Story Game for VS Code (Summarizer)",
+          "default": "Interactive Novel Game for VS Code (Summarizer)",
           "description": "[Summarization] (Optional) The X-Title header for OpenRouter.",
           "order": 14
         }
